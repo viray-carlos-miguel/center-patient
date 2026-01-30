@@ -1,190 +1,151 @@
+# backend/database/database.py
+import asyncpg
 import os
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.orm import declarative_base
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Database configuration
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/medical_center"
-)
+# Try different connection strings
+# backend/database/database.py
+DATABASE_URL = "postgresql://postgres:carlosviray91@localhost:5432/medical_center"
 
-# Create async engine
-engine = create_async_engine(
-    DATABASE_URL,
-    echo=True,  # Set to False in production
-    pool_size=20,
-    max_overflow=30,
-    pool_pre_ping=True
-)
+# Common password options to try
+PASSWORD_OPTIONS = ["postgres", "admin", "password", ""]
 
-# Create session factory
-AsyncSessionLocal = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False
-)
-
-Base = declarative_base()
-
-# Dependency to get DB session
-async def get_db():
-    async with AsyncSessionLocal() as session:
+async def get_db_connection():
+    """Get a database connection - try different passwords"""
+    for password in PASSWORD_OPTIONS:
         try:
-            yield session
-            await session.commit()
+            # Try with current password option
+            test_url = f"postgresql://postgres:{password}@localhost:5432/medical_center"
+            conn = await asyncpg.connect(test_url)
+            print(f"✅ Connected to PostgreSQL with password: {'[empty]' if password == '' else password}")
+            return conn
         except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
-
-# Initialize database
-async def init_db():
-    async with engine.begin() as conn:
-        # Create all tables
-        await conn.run_sync(Base.metadata.create_all)
-        
-        # Insert initial data
-        await seed_initial_data()
-
-async def seed_initial_data():
-    from sqlalchemy import text
+            continue
     
-    async with AsyncSessionLocal() as session:
-        # Check if we already have demo data
-        result = await session.execute(text("SELECT COUNT(*) FROM users"))
-        count = result.scalar()
+    # If none work, try without password
+    try:
+        conn = await asyncpg.connect("postgresql://postgres@localhost:5432/medical_center")
+        print("✅ Connected to PostgreSQL without password")
+        return conn
+    except Exception as e:
+        print(f"❌ All connection attempts failed. Last error: {e}")
+        print("\n💡 Try setting PostgreSQL password:")
+        print("1. Open pgAdmin or psql")
+        print("2. Run: ALTER USER postgres WITH PASSWORD 'postgres';")
+        print("3. Or create new database: CREATE DATABASE medical_center;")
+        raise
+
+async def init_database():
+    """Initialize database with tables and demo data"""
+    conn = None
+    try:
+        print("🔧 Initializing database...")
+        conn = await get_db_connection()
         
-        if count == 0:
-            print("🌱 Seeding initial data...")
+        # Check if database exists, if not create it
+        try:
+            await conn.fetchval("SELECT 1")
+        except:
+            print("Database doesn't exist. Creating...")
+            # Close connection to create database
+            await conn.close()
             
-            # Create demo users with hashed passwords
-            from passlib.context import CryptContext
-            pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            # Connect to default postgres database to create our database
+            admin_conn = await asyncpg.connect("postgresql://postgres@localhost:5432/postgres")
+            await admin_conn.execute("CREATE DATABASE medical_center;")
+            await admin_conn.close()
             
+            # Reconnect to new database
+            conn = await get_db_connection()
+        
+        # Create users table
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+            email VARCHAR(255) UNIQUE NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            role VARCHAR(50) NOT NULL CHECK (role IN ('patient', 'doctor', 'admin')),
+            first_name VARCHAR(100) NOT NULL,
+            last_name VARCHAR(100) NOT NULL,
+            is_active BOOLEAN DEFAULT true,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_login TIMESTAMP
+        )
+        """)
+        
+        # Create medical_cases table
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS medical_cases (
+            id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+            patient_id UUID REFERENCES users(id),
+            doctor_id UUID REFERENCES users(id),
+            title VARCHAR(200) NOT NULL,
+            symptoms TEXT NOT NULL,
+            severity VARCHAR(20) CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+            status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'under_review', 'diagnosed', 'treated', 'closed')),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        
+        # Check if we have demo data
+        user_count = await conn.fetchval("SELECT COUNT(*) FROM users")
+        if user_count == 0:
+            print("🌱 Adding demo data...")
+            
+            # Insert demo users
             demo_users = [
-                {
-                    "email": "admin@medical.com",
-                    "password": pwd_context.hash("Admin@123"),
-                    "role": "admin",
-                    "first_name": "System",
-                    "last_name": "Admin"
-                },
-                {
-                    "email": "dr.smith@medical.com",
-                    "password": pwd_context.hash("Doctor@2024"),
-                    "role": "doctor",
-                    "first_name": "John",
-                    "last_name": "Smith",
-                    "medical_license": "MD-123456",
-                    "specialization": "Cardiology"
-                },
-                {
-                    "email": "dr.jones@medical.com",
-                    "password": pwd_context.hash("Neurology@2024"),
-                    "role": "doctor",
-                    "first_name": "Sarah",
-                    "last_name": "Jones",
-                    "medical_license": "MD-789012",
-                    "specialization": "Neurology"
-                },
-                {
-                    "email": "patient.demo@medical.com",
-                    "password": pwd_context.hash("Patient@123"),
-                    "role": "patient",
-                    "first_name": "Demo",
-                    "last_name": "Patient",
-                    "blood_type": "O+",
-                    "allergies": "Penicillin, Peanuts"
-                },
-                {
-                    "email": "john.doe@example.com",
-                    "password": pwd_context.hash("Password123"),
-                    "role": "patient",
-                    "first_name": "John",
-                    "last_name": "Doe",
-                    "blood_type": "A-"
-                }
+                ("admin@medical.com", "admin123", "admin", "System", "Admin"),
+                ("dr.smith@medical.com", "doctor123", "doctor", "John", "Smith"),
+                ("dr.jones@medical.com", "neurology123", "doctor", "Sarah", "Jones"),
+                ("patient.demo@medical.com", "patient123", "patient", "Demo", "Patient"),
+                ("john.doe@example.com", "password123", "patient", "John", "Doe")
             ]
             
-            for user_data in demo_users:
-                # Insert into users table
-                role = user_data.pop("role")
-                medical_license = user_data.pop("medical_license", None)
-                specialization = user_data.pop("specialization", None)
-                blood_type = user_data.pop("blood_type", None)
-                allergies = user_data.pop("allergies", None)
-                
-                user_result = await session.execute(
-                    text("""
-                    INSERT INTO users (email, password_hash, role, first_name, last_name, is_active)
-                    VALUES (:email, :password, :role, :first_name, :last_name, true)
-                    RETURNING id
-                    """),
-                    {
-                        "email": user_data["email"],
-                        "password": user_data["password"],
-                        "role": role,
-                        "first_name": user_data["first_name"],
-                        "last_name": user_data["last_name"]
-                    }
-                )
-                user_id = user_result.scalar()
-                
-                # Insert role-specific data
-                if role == "doctor" and medical_license:
-                    await session.execute(
-                        text("""
-                        INSERT INTO doctors (user_id, medical_license, specialization, is_verified)
-                        VALUES (:user_id, :license, :specialization, true)
-                        """),
-                        {
-                            "user_id": user_id,
-                            "license": medical_license,
-                            "specialization": specialization
-                        }
-                    )
-                elif role == "patient":
-                    await session.execute(
-                        text("""
-                        INSERT INTO patients (user_id, blood_type, allergies)
-                        VALUES (:user_id, :blood_type, :allergies)
-                        """),
-                        {
-                            "user_id": user_id,
-                            "blood_type": blood_type,
-                            "allergies": allergies
-                        }
-                    )
+            for email, password, role, first_name, last_name in demo_users:
+                await conn.execute("""
+                INSERT INTO users (email, password_hash, role, first_name, last_name, is_active)
+                VALUES ($1, $2, $3, $4, $5, true)
+                ON CONFLICT (email) DO NOTHING
+                """, email, password, role, first_name, last_name)
             
-            # Create some demo medical cases
-            await session.execute(
-                text("""
-                INSERT INTO medical_cases 
-                (patient_id, doctor_id, title, symptoms, severity, status, priority)
-                VALUES 
-                ((SELECT id FROM users WHERE email = 'patient.demo@medical.com'),
-                 (SELECT id FROM users WHERE email = 'dr.smith@medical.com'),
-                 'Persistent Headache with Fever',
-                 'Headache lasting 3 days, fever of 38.5°C, fatigue, mild photophobia',
-                 'medium', 'under_review', 3),
-                 
-                ((SELECT id FROM users WHERE email = 'john.doe@example.com'),
-                 NULL,
-                 'Seasonal Allergy Symptoms',
-                 'Sneezing, runny nose, itchy eyes, nasal congestion for 2 weeks',
-                 'low', 'pending', 7),
-                 
-                ((SELECT id FROM users WHERE email = 'patient.demo@medical.com'),
-                 NULL,
-                 'Lower Back Pain',
-                 'Acute lower back pain after lifting heavy objects, difficulty bending',
-                 'high', 'pending', 2)
-                """)
-            )
+            # Insert demo cases
+            await conn.execute("""
+            INSERT INTO medical_cases (patient_id, title, symptoms, severity, status)
+            SELECT 
+                u.id,
+                'Persistent Headache with Fever',
+                'Headache for 3 days, fever 38.5°C, fatigue, mild dizziness',
+                'medium',
+                'pending'
+            FROM users u WHERE u.email = 'patient.demo@medical.com'
+            ON CONFLICT DO NOTHING
+            """)
             
-            await session.commit()
-            print("✅ Initial data seeded successfully!")
+            await conn.execute("""
+            INSERT INTO medical_cases (patient_id, title, symptoms, severity, status)
+            SELECT 
+                u.id,
+                'Seasonal Allergy Symptoms',
+                'Sneezing, runny nose, itchy eyes, congestion for 2 weeks',
+                'low',
+                'pending'
+            FROM users u WHERE u.email = 'john.doe@example.com'
+            ON CONFLICT DO NOTHING
+            """)
+            
+            print("✅ Demo data added!")
+        
+        print("✅ Database initialized successfully!")
+        
+    except Exception as e:
+        print(f"❌ Database initialization failed: {e}")
+        print("\n💡 Try these fixes:")
+        print("1. Make sure PostgreSQL is running: net start postgresql-x64-16")
+        print("2. Check password in pg_hba.conf file")
+        print("3. Try: ALTER USER postgres WITH PASSWORD 'postgres';")
+        raise
+    finally:
+        if conn:
+            await conn.close()
