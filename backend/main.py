@@ -16,14 +16,17 @@ import hashlib
 load_dotenv()
 
 # Import AI Predictor
+# In backend/main.py, update the AI import section:
 try:
-    from ai_system.core.predictor import ClinicalPredictor
-    predictor = ClinicalPredictor()
+    from ai_system.core.gemini_predictor import GeminiClinicalPredictor
+    predictor = GeminiClinicalPredictor()
     AI_ENABLED = True
-except ImportError:
-    print("⚠️ AI module not found, using fallback")
+    print("✅ Gemini AI initialized successfully")
+except ImportError as e:
+    print(f"⚠️ Gemini module not found: {e}")
     AI_ENABLED = False
-    class ClinicalPredictor:
+    # Fallback to simple predictor
+    class SimplePredictor:
         def analyze_symptoms(self, symptoms, patient_info):
             return {
                 "disease_predictions": [{
@@ -37,9 +40,10 @@ except ImportError:
                     "urgency_level": "low",
                     "recommended_action": "Rest and monitor"
                 },
-                "confidence_score": 0.65
+                "confidence_score": 0.65,
+                "educational_notes": "AI analysis for educational purposes only"
             }
-    predictor = ClinicalPredictor()
+    predictor = SimplePredictor()
 
 # Database Configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/medical_center")
