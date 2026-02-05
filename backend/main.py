@@ -1,4 +1,4 @@
-﻿# backend/main.py
+﻿# backend/main.py - REALISTIC VERSION
 from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 import uvicorn
 import asyncpg
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, validator
 import os
 from dotenv import load_dotenv
 import json
@@ -16,7 +16,6 @@ import hashlib
 load_dotenv()
 
 # Import AI Predictor
-# In backend/main.py, update the AI import section:
 try:
     from ai_system.core.gemini_predictor import GeminiClinicalPredictor
     predictor = GeminiClinicalPredictor()
@@ -50,7 +49,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localho
 
 # Pydantic Models
 class UserBase(BaseModel):
-    email: str
+    email: EmailStr
     role: str
     first_name: str
     last_name: str
@@ -59,18 +58,50 @@ class UserCreate(UserBase):
     password: str
 
 class UserLogin(BaseModel):
-    email: str
+    email: EmailStr
     password: str
+
+    @validator('email')
+    def validate_email_domain(cls, v):
+        """Validate email domain based on role"""
+        # This validation is done in the registration endpoint
+        return v
 
 class PatientRegistration(BaseModel):
     first_name: str
     last_name: str
-    email: str
+    email: EmailStr
     password: str
     date_of_birth: str
     phone: Optional[str] = None
     agree_to_terms: bool
     acknowledge_educational: bool
+
+    @validator('email')
+    def validate_patient_email(cls, v):
+        """Patients must use personal email domains"""
+        allowed_domains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com']
+        domain = v.split('@')[-1].lower()
+        if domain not in allowed_domains:
+            raise ValueError('Patients must use personal email addresses (gmail.com, yahoo.com, etc.)')
+        return v
+
+class DoctorRegistration(BaseModel):
+    first_name: str
+    last_name: str
+    email: EmailStr
+    password: str
+    medical_license: str
+    specialization: str
+    agree_to_terms: bool
+    acknowledge_educational: bool
+
+    @validator('email')
+    def validate_doctor_email(cls, v):
+        """Doctors must use medical email domains"""
+        if not v.endswith('@medical.com'):
+            raise ValueError('Doctors must use @medical.com email addresses')
+        return v
 
 class UserResponse(BaseModel):
     id: int
@@ -152,7 +183,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Configuration - UPDATED with comprehensive settings
+# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"],
@@ -175,15 +206,7 @@ async def init_database():
     """Initialize PostgreSQL database with tables and demo data"""
     conn = await asyncpg.connect(DATABASE_URL)
     try:
-        # First, try to drop tables if they exist with wrong structure
-        try:
-            await conn.execute("DROP TABLE IF EXISTS medical_cases CASCADE")
-            await conn.execute("DROP TABLE IF EXISTS patients CASCADE")
-            await conn.execute("DROP TABLE IF EXISTS users CASCADE")
-        except:
-            pass  # Ignore errors if tables don't exist
-        
-        # Create users table with SERIAL (integer) id
+        # Create users table
         await conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -198,7 +221,7 @@ async def init_database():
         )
         """)
         
-        # Create medical_cases table first (simpler, without patients table for now)
+        # Create medical_cases table
         await conn.execute("""
         CREATE TABLE IF NOT EXISTS medical_cases (
             id SERIAL PRIMARY KEY,
@@ -219,132 +242,54 @@ async def init_database():
         )
         """)
         
-        # Check if demo data exists
-        user_count = await conn.fetchval("SELECT COUNT(*) FROM users")
+        # Create patients table
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS patients (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+            date_of_birth DATE,
+            phone VARCHAR(50),
+            emergency_contact VARCHAR(100),
+            blood_type VARCHAR(10),
+            allergies TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
         
-        if user_count == 0:
-            print("🌱 Adding demo users to PostgreSQL...")
-            
-            # Create demo users with hashed passwords
-            demo_users = [
-                ("patient.demo@medical.com", "patient123", "patient", "Demo", "Patient"),
-                ("dr.smith@medical.com", "doctor123", "doctor", "John", "Smith"),
-                ("dr.jones@medical.com", "neurology123", "doctor", "Sarah", "Jones"),
-                ("admin@medical.com", "admin123", "admin", "System", "Admin"),
-                ("john.doe@example.com", "password123", "patient", "John", "Doe")
-            ]
-            
-            for email, password, role, first_name, last_name in demo_users:
-                # Simple password hash for demo
-                password_hash = hashlib.sha256(password.encode()).hexdigest()
-                await conn.execute("""
-                INSERT INTO users (email, password_hash, role, first_name, last_name, is_active)
-                VALUES ($1, $2, $3, $4, $5, true)
-                ON CONFLICT (email) DO NOTHING
-                """, email, password_hash, role, first_name, last_name)
-            
-            print("✅ Demo users added")
-            
-            # Create demo cases
-            patient = await conn.fetchrow("SELECT id FROM users WHERE email = 'patient.demo@medical.com'")
-            if patient:
-                demo_symptoms = {
-                    "description": "Headache for 3 days, fever 38.5°C, fatigue, mild dizziness",
-                    "duration_hours": 72,
-                    "severity": 7,
-                    "temperature": 38.5,
-                    "has_fever": True,
-                    "has_headache": True,
-                    "has_fatigue": True,
-                    "additional_notes": "Symptoms started suddenly"
-                }
-                
-                demo_ai = {
-                    "possible_conditions": ["Migraine", "Viral Infection", "Tension Headache"],
-                    "confidence_score": 0.75,
-                    "recommended_tests": ["Physical Exam", "Temperature Monitoring"],
-                    "urgency_level": "medium",
-                    "educational_note": "AI assessment for educational purposes only"
-                }
-                
-                await conn.execute("""
-                INSERT INTO medical_cases (patient_id, symptoms, ai_assessment, status)
-                VALUES ($1, $2::jsonb, $3::jsonb, 'pending_review')
-                """, patient['id'], json.dumps(demo_symptoms), json.dumps(demo_ai))
-                
-                print("✅ Demo case added")
+        # Create doctors table
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS doctors (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+            medical_license VARCHAR(100) UNIQUE NOT NULL,
+            specialization VARCHAR(100) NOT NULL,
+            years_of_experience INTEGER DEFAULT 0,
+            is_available BOOLEAN DEFAULT true,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
         
-        # Now create patients table if it doesn't exist (without foreign key for now)
-        try:
+        # Check if we need to create initial admin
+        admin_exists = await conn.fetchval(
+            "SELECT COUNT(*) FROM users WHERE email = 'admin@medical.com'"
+        )
+        
+        if admin_exists == 0:
+            print("👨‍⚕️ Creating initial admin account...")
+            password_hash = hashlib.sha256("Admin@123".encode()).hexdigest()
             await conn.execute("""
-            CREATE TABLE IF NOT EXISTS patients (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER,
-                date_of_birth DATE,
-                phone VARCHAR(50),
-                emergency_contact VARCHAR(100),
-                blood_type VARCHAR(10),
-                allergies TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """)
-            
-            # Add foreign key constraint separately
-            try:
-                await conn.execute("""
-                ALTER TABLE patients 
-                ADD CONSTRAINT fk_patient_user 
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-                """)
-            except:
-                print("⚠️ Could not add foreign key constraint - continuing anyway")
-                
-        except Exception as e:
-            print(f"⚠️ Patients table creation warning: {e}")
+            INSERT INTO users (email, password_hash, role, first_name, last_name, is_active)
+            VALUES ($1, $2, 'admin', 'System', 'Admin', true)
+            """, "admin@medical.com", password_hash)
+            print("✅ Admin account created (email: admin@medical.com, password: Admin@123)")
         
         await conn.close()
         print("🎯 PostgreSQL database ready!")
         
     except Exception as e:
         print(f"❌ Database initialization failed: {e}")
-        # Try a simpler approach
-        try:
-            print("🔄 Trying simpler database setup...")
-            conn = await asyncpg.connect(DATABASE_URL)
-            
-            # Just create basic tables without foreign keys
-            await conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                email VARCHAR(255) UNIQUE NOT NULL,
-                password_hash VARCHAR(255) NOT NULL,
-                role VARCHAR(50) NOT NULL,
-                first_name VARCHAR(100) NOT NULL,
-                last_name VARCHAR(100) NOT NULL,
-                is_active BOOLEAN DEFAULT true,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """)
-            
-            await conn.execute("""
-            CREATE TABLE IF NOT EXISTS medical_cases (
-                id SERIAL PRIMARY KEY,
-                patient_id INTEGER,
-                symptoms JSONB NOT NULL,
-                ai_assessment JSONB,
-                status VARCHAR(50) DEFAULT 'pending_review',
-                doctor_diagnosis TEXT,
-                doctor_notes TEXT,
-                prescription JSONB,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """)
-            
-            await conn.close()
-            print("✅ Created basic tables without foreign keys")
-        except Exception as e2:
-            print(f"❌ Even simple setup failed: {e2}")
         raise
 
 # Authentication helper
@@ -364,13 +309,22 @@ async def root():
         "status": "operational"
     }
 
-@app.post("/api/auth/register", response_model=Dict[str, Any])
+@app.post("/api/auth/register/patient", response_model=Dict[str, Any])
 async def register_patient(registration: PatientRegistration):
     """Register a new patient account"""
     if not registration.agree_to_terms or not registration.acknowledge_educational:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Must agree to terms and acknowledge educational purpose"
+        )
+    
+    # Validate patient email domain
+    domain = registration.email.split('@')[-1].lower()
+    allowed_domains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com']
+    if domain not in allowed_domains:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Patients must use personal email addresses (gmail.com, yahoo.com, etc.)"
         )
     
     pool = await get_connection()
@@ -389,29 +343,29 @@ async def register_patient(registration: PatientRegistration):
             )
         
         # Hash password
-        password_hash = hashlib.sha256(registration.password.encode()).hexdigest()
+        password_hash = hash_password(registration.password)
         
-        # Insert new patient
         try:
-            result = await conn.fetchrow("""
-            INSERT INTO users (
-                email, password_hash, role, first_name, last_name, 
-                is_active, created_at
-            ) VALUES ($1, $2, 'patient', $3, $4, true, CURRENT_TIMESTAMP)
-            RETURNING id, email, role, first_name, last_name, created_at
-            """, 
-            registration.email, password_hash, 
-            registration.first_name, registration.last_name)
-            
-            # Try to create patient profile (optional)
-            try:
+            # Start transaction
+            async with conn.transaction():
+                # Insert new user
+                result = await conn.fetchrow("""
+                INSERT INTO users (
+                    email, password_hash, role, first_name, last_name, 
+                    is_active, created_at
+                ) VALUES ($1, $2, 'patient', $3, $4, true, CURRENT_TIMESTAMP)
+                RETURNING id, email, role, first_name, last_name, created_at
+                """, 
+                registration.email, 
+                password_hash, 
+                registration.first_name.strip(),
+                registration.last_name.strip())
+                
+                # Create patient profile
                 await conn.execute("""
                 INSERT INTO patients (user_id, date_of_birth, phone)
                 VALUES ($1, $2, $3)
                 """, result['id'], registration.date_of_birth, registration.phone)
-            except Exception as e:
-                print(f"Note: Could not create patient profile: {e}")
-                # Continue without patient profile - it's optional
         
         except asyncpg.exceptions.UniqueViolationError:
             raise HTTPException(
@@ -445,18 +399,112 @@ async def register_patient(registration: PatientRegistration):
             "educational_note": "Educational account created - not for real medical use"
         }
 
-@app.post("/api/auth/login", response_model=Dict[str, Any])
-async def login(login_data: UserLogin):
-    """Authenticate user with PostgreSQL"""
-    print("=" * 50)
-    print(f"🔐 LOGIN ATTEMPT DEBUG")
-    print(f"📧 Email: '{login_data.email}'")
-    print(f"🔑 Password: '{login_data.password}'")
+@app.post("/api/auth/register/doctor", response_model=Dict[str, Any])
+async def register_doctor(registration: DoctorRegistration):
+    """Register a new doctor account"""
+    if not registration.agree_to_terms or not registration.acknowledge_educational:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Must agree to terms and acknowledge educational purpose"
+        )
+    
+    # Validate doctor email domain
+    if not registration.email.endswith('@medical.com'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Doctors must use @medical.com email addresses"
+        )
     
     pool = await get_connection()
     
     async with pool.acquire() as conn:
-        # Find user
+        # Check if email already exists
+        existing_user = await conn.fetchrow(
+            "SELECT id FROM users WHERE email = $1",
+            registration.email
+        )
+        
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+        
+        # Check if medical license already exists
+        existing_license = await conn.fetchval(
+            "SELECT COUNT(*) FROM doctors WHERE medical_license = $1",
+            registration.medical_license
+        )
+        
+        if existing_license > 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Medical license already registered"
+            )
+        
+        # Hash password
+        password_hash = hash_password(registration.password)
+        
+        try:
+            # Start transaction
+            async with conn.transaction():
+                # Insert new user
+                result = await conn.fetchrow("""
+                INSERT INTO users (
+                    email, password_hash, role, first_name, last_name, 
+                    is_active, created_at
+                ) VALUES ($1, $2, 'doctor', $3, $4, true, CURRENT_TIMESTAMP)
+                RETURNING id, email, role, first_name, last_name, created_at
+                """, 
+                registration.email, 
+                password_hash, 
+                registration.first_name.strip(),
+                registration.last_name.strip())
+                
+                # Create doctor profile
+                await conn.execute("""
+                INSERT INTO doctors (user_id, medical_license, specialization)
+                VALUES ($1, $2, $3)
+                """, result['id'], registration.medical_license, registration.specialization)
+        
+        except Exception as e:
+            print(f"Doctor registration error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Doctor registration failed. Please try again."
+            )
+        
+        # Prepare response
+        user_response = {
+            "id": result['id'],
+            "email": result['email'],
+            "role": result['role'],
+            "first_name": result['first_name'],
+            "last_name": result['last_name'],
+            "full_name": f"Dr. {result['first_name']} {result['last_name']}",
+            "is_active": True,
+            "created_at": result['created_at'].isoformat() if result['created_at'] else None
+        }
+        
+        return {
+            "success": True,
+            "user": user_response,
+            "message": "Doctor account created successfully",
+            "token": f"doctor_token_{result['id']}_{datetime.now().timestamp()}",
+            "educational_note": "Educational account created - not for real medical practice"
+        }
+
+@app.post("/api/auth/login", response_model=Dict[str, Any])
+async def login(login_data: UserLogin):
+    """Authenticate user with PostgreSQL - NO AUTO-REGISTRATION"""
+    print("=" * 50)
+    print(f"🔐 LOGIN ATTEMPT")
+    print(f"📧 Email: '{login_data.email}'")
+    
+    pool = await get_connection()
+    
+    async with pool.acquire() as conn:
+        # Find user - must exist in database
         user = await conn.fetchrow(
             "SELECT * FROM users WHERE email = $1 AND is_active = true",
             login_data.email.strip()
@@ -464,41 +512,26 @@ async def login(login_data: UserLogin):
         
         if not user:
             print(f"❌ USER NOT FOUND: {login_data.email}")
-            # Show all users for debugging
-            all_users = await conn.fetch("SELECT email, password_hash FROM users")
-            print(f"📋 Available users in database:")
-            for u in all_users:
-                print(f"  - {u['email']}: {u['password_hash'][:20]}...")
+            
+            # Suggest registration based on email domain
+            domain = login_data.email.split('@')[-1].lower()
+            if domain == 'medical.com':
+                suggestion = "Please register as a doctor first."
+            else:
+                suggestion = "Please register as a patient first."
             
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password"
+                detail=f"User not found. {suggestion}"
             )
         
-        print(f"✅ User found in DB: {user['email']}")
-        print(f"📦 Stored password hash: {user['password_hash']}")
-        print(f"📦 Stored hash length: {len(user['password_hash'])}")
+        print(f"✅ User found: {user['email']} (Role: {user['role']})")
         
         # Calculate hash of input password
-        input_hash = hashlib.sha256(login_data.password.strip().encode()).hexdigest()
-        print(f"🔢 Input password hash: {input_hash}")
-        print(f"🔢 Input hash length: {len(input_hash)}")
-        print(f"🔍 Hash match: {input_hash == user['password_hash']}")
+        input_hash = hash_password(login_data.password.strip())
         
         if input_hash != user['password_hash']:
             print(f"❌ PASSWORD MISMATCH!")
-            print(f"   Expected: {user['password_hash']}")
-            print(f"   Got:      {input_hash}")
-            
-            # Also show what password would produce the stored hash
-            # Try common passwords
-            common_passwords = ["patient123", "doctor123", "neurology123", "admin123", "password123"]
-            for pwd in common_passwords:
-                test_hash = hashlib.sha256(pwd.encode()).hexdigest()
-                if test_hash == user['password_hash']:
-                    print(f"💡 Hint: Stored hash matches password: '{pwd}'")
-                    break
-            
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
@@ -508,13 +541,17 @@ async def login(login_data: UserLogin):
         print("=" * 50)
         
         # Prepare user response
+        full_name = f"{user['first_name']} {user['last_name']}"
+        if user['role'] == 'doctor':
+            full_name = f"Dr. {full_name}"
+        
         user_response = {
             "id": user['id'],
             "email": user['email'],
             "role": user['role'],
             "first_name": user['first_name'],
             "last_name": user['last_name'],
-            "full_name": f"{user['first_name']} {user['last_name']}",
+            "full_name": full_name,
             "is_active": user['is_active'],
             "created_at": user['created_at'].isoformat() if user['created_at'] else None
         }
@@ -523,8 +560,11 @@ async def login(login_data: UserLogin):
             "success": True,
             "user": user_response,
             "message": "Login successful",
-            "token": f"postgres-token-{user['id']}-{datetime.now().timestamp()}"
+            "token": f"auth-token-{user['id']}-{datetime.now().timestamp()}"
         }
+
+# [Keep all other endpoints the same as before...]
+# ... rest of your existing endpoints for cases, health, stats, etc.
 
 @app.post("/api/cases/submit", response_model=Dict[str, Any])
 async def submit_case(
@@ -532,8 +572,21 @@ async def submit_case(
     request: Request
 ):
     """Submit new medical case with AI assessment"""
-    # Get patient ID from auth (simplified for demo)
-    patient_id = 1  # Default for demo
+    # In real implementation, get patient ID from JWT token
+    # For now, using simplified auth
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        patient_id = 1  # Default fallback
+    else:
+        # Extract user ID from token (simplified)
+        try:
+            token = auth_header.replace('Bearer ', '')
+            if 'patient_token_' in token:
+                patient_id = int(token.split('_')[2])
+            else:
+                patient_id = 1
+        except:
+            patient_id = 1
     
     pool = await get_connection()
     
@@ -585,9 +638,18 @@ async def submit_case(
         }
 
 @app.get("/api/patient/cases", response_model=Dict[str, Any])
-async def get_patient_cases():
+async def get_patient_cases(request: Request):
     """Get all cases for current patient"""
-    patient_id = 1  # Default for demo
+    # In real implementation, get patient ID from JWT token
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    try:
+        token = auth_header.replace('Bearer ', '')
+        patient_id = 1  # Simplified - extract from token in real implementation
+    except:
+        raise HTTPException(status_code=401, detail="Invalid token")
     
     pool = await get_connection()
     
@@ -632,8 +694,13 @@ async def get_patient_cases():
         }
 
 @app.get("/api/doctor/cases", response_model=Dict[str, Any])
-async def get_doctor_cases():
+async def get_doctor_cases(request: Request):
     """Get all cases for doctor review"""
+    # Check authentication
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
     pool = await get_connection()
     
     async with pool.acquire() as conn:
@@ -683,9 +750,15 @@ async def get_doctor_cases():
         }
 
 @app.post("/api/cases/{case_id}/review", response_model=Dict[str, Any])
-async def review_case(case_id: int, review: CaseReview):
+async def review_case(case_id: int, review: CaseReview, request: Request):
     """Doctor reviews and diagnoses a case"""
-    doctor_id = 2  # Default doctor for demo
+    # Check authentication
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # In real implementation, extract doctor ID from token
+    doctor_id = 2  # Default for now
     
     pool = await get_connection()
     
@@ -751,12 +824,16 @@ async def get_stats():
         pending_cases = await conn.fetchval("SELECT COUNT(*) FROM medical_cases WHERE status = 'pending_review'")
         completed_cases = await conn.fetchval("SELECT COUNT(*) FROM medical_cases WHERE status = 'completed'")
         total_users = await conn.fetchval("SELECT COUNT(*) FROM users")
+        total_patients = await conn.fetchval("SELECT COUNT(*) FROM users WHERE role = 'patient'")
+        total_doctors = await conn.fetchval("SELECT COUNT(*) FROM users WHERE role = 'doctor'")
         
         return {
             "total_cases": total_cases,
             "pending_review": pending_cases,
             "completed": completed_cases,
             "total_users": total_users,
+            "total_patients": total_patients,
+            "total_doctors": total_doctors,
             "database": "PostgreSQL",
             "timestamp": datetime.now().isoformat()
         }
@@ -788,4 +865,4 @@ if __name__ == "__main__":
         port=8000,
         reload=True,
         log_level="info"
-    )   
+    )
