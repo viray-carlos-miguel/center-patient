@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 import uvicorn
-import asyncpg
+import aiomysql
 from pydantic import BaseModel, EmailStr, validator
 import os
 from dotenv import load_dotenv
@@ -44,8 +44,12 @@ except ImportError as e:
             }
     predictor = SimplePredictor()
 
-# Database Configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/medical_center")
+# MySQL Database Configuration
+MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
+MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
+MYSQL_USER = os.getenv("MYSQL_USER", "root")
+MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "")
+MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "medical_center")
 
 # Pydantic Models
 class UserBase(BaseModel):
@@ -131,11 +135,11 @@ class CaseReview(BaseModel):
 async def lifespan(app: FastAPI):
     """Handle startup and shutdown events"""
     print("🚀 Starting Medical Center Backend...")
-    print(f"📊 PostgreSQL URL: {DATABASE_URL}")
+    print(f"📊 MySQL Configuration: {MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DATABASE}")
     
     try:
         await init_database()
-        print("✅ Database initialized successfully")
+        print("✅ MySQL database initialized successfully")
     except Exception as e:
         print(f"⚠️ Database warning: {e}")
         print("⚠️ Starting with fallback mode")
@@ -146,7 +150,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Medical Center API",
-    description="Professional Medical Education Platform with PostgreSQL",
+    description="Professional Medical Education Platform with MySQL",
     version="2.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -169,98 +173,130 @@ async def get_connection():
     """Get database connection from pool"""
     global pool
     if pool is None:
-        pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
+        pool = await aiomysql.create_pool(
+            host=MYSQL_HOST,
+            port=MYSQL_PORT,
+            user=MYSQL_USER,
+            password=MYSQL_PASSWORD,
+            db=MYSQL_DATABASE,
+            minsize=1,
+            maxsize=10,
+            autocommit=True
+        )
     return pool
 
 async def init_database():
-    """Initialize PostgreSQL database with tables and demo data"""
-    conn = await asyncpg.connect(DATABASE_URL)
+    """Initialize MySQL database with tables and demo data"""
     try:
+        # First connect without specifying database to create it if needed
+        conn = await aiomysql.connect(
+            host=MYSQL_HOST,
+            port=MYSQL_PORT,
+            user=MYSQL_USER,
+            password=MYSQL_PASSWORD,
+            autocommit=True
+        )
+        cursor = await conn.cursor()
+        
+        # Create database if it doesn't exist
+        await cursor.execute(f"CREATE DATABASE IF NOT EXISTS {MYSQL_DATABASE}")
+        await cursor.execute(f"USE {MYSQL_DATABASE}")
+        
         # Create users table
-        await conn.execute("""
+        await cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
+            id INT AUTO_INCREMENT PRIMARY KEY,
             email VARCHAR(255) UNIQUE NOT NULL,
             password_hash VARCHAR(255) NOT NULL,
-            role VARCHAR(50) NOT NULL CHECK (role IN ('patient', 'doctor', 'admin')),
+            role ENUM('patient', 'doctor', 'admin') NOT NULL,
             first_name VARCHAR(100) NOT NULL,
             last_name VARCHAR(100) NOT NULL,
-            is_active BOOLEAN DEFAULT true,
+            is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
         """)
         
         # Create medical_cases table
-        await conn.execute("""
+        await cursor.execute("""
         CREATE TABLE IF NOT EXISTS medical_cases (
-            id SERIAL PRIMARY KEY,
-            patient_id INTEGER,
-            doctor_id INTEGER,
-            symptoms JSONB NOT NULL,
-            ai_assessment JSONB,
-            status VARCHAR(50) DEFAULT 'pending_review' 
-                CHECK (status IN ('pending_review', 'in_review', 'completed')),
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            patient_id INT,
+            doctor_id INT,
+            symptoms JSON NOT NULL,
+            ai_assessment JSON,
+            status ENUM('pending_review', 'in_review', 'completed') DEFAULT 'pending_review',
             doctor_diagnosis TEXT,
             doctor_notes TEXT,
-            prescription JSONB,
-            follow_up_required BOOLEAN DEFAULT false,
-            follow_up_days INTEGER,
+            prescription JSON,
+            follow_up_required BOOLEAN DEFAULT FALSE,
+            follow_up_days INT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            reviewed_at TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            reviewed_at TIMESTAMP NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (patient_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (doctor_id) REFERENCES users(id) ON DELETE SET NULL
         )
         """)
         
         # Create patients table
-        await conn.execute("""
+        await cursor.execute("""
         CREATE TABLE IF NOT EXISTS patients (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNIQUE REFERENCES users(id) ON DELETE CASCADE,
             date_of_birth DATE,
             phone VARCHAR(50),
             emergency_contact VARCHAR(100),
             blood_type VARCHAR(10),
             allergies TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
         """)
         
         # Create doctors table
-        await conn.execute("""
+        await cursor.execute("""
         CREATE TABLE IF NOT EXISTS doctors (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNIQUE REFERENCES users(id) ON DELETE CASCADE,
             medical_license VARCHAR(100) UNIQUE NOT NULL,
             specialization VARCHAR(100) NOT NULL,
-            years_of_experience INTEGER DEFAULT 0,
-            is_available BOOLEAN DEFAULT true,
+            years_of_experience INT DEFAULT 0,
+            is_available BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
         """)
         
         # Check if we need to create initial admin
-        admin_exists = await conn.fetchval(
-            "SELECT COUNT(*) FROM users WHERE email = 'admin@medical.com'"
-        )
+        await cursor.execute("SELECT COUNT(*) FROM users WHERE email = %s", ("admin@medical.com",))
+        admin_exists = (await cursor.fetchone())[0]
         
         if admin_exists == 0:
             print("👨‍⚕️ Creating initial admin account...")
             password_hash = hashlib.sha256("Admin@123".encode()).hexdigest()
-            await conn.execute("""
+            await cursor.execute("""
             INSERT INTO users (email, password_hash, role, first_name, last_name, is_active)
-            VALUES ($1, $2, 'admin', 'System', 'Admin', true)
+            VALUES (%s, %s, 'admin', 'System', 'Admin', TRUE)
             """, "admin@medical.com", password_hash)
             print("✅ Admin account created (email: admin@medical.com, password: Admin@123)")
         
-        await conn.close()
-        print("🎯 PostgreSQL database ready!")
+        print("🎯 MySQL database ready!")
         
     except Exception as e:
         print(f"❌ Database initialization failed: {e}")
         raise
+    finally:
+        try:
+            if cursor:
+                await cursor.close()
+        except:
+            pass
+        try:
+            if conn:
+                await conn.close()
+        except:
+            pass
 
 # Authentication helper
 def hash_password(password: str) -> str:
@@ -275,7 +311,7 @@ async def root():
     return {
         "message": "Medical Center API",
         "version": "2.0.0",
-        "database": "PostgreSQL",
+        "database": "MySQL",
         "status": "operational"
     }
 
@@ -300,11 +336,11 @@ async def register_user(registration: Registration):
     pool = await get_connection()
     
     async with pool.acquire() as conn:
+        cursor = await conn.cursor()
+        
         # Check if email already exists
-        existing_user = await conn.fetchrow(
-            "SELECT id FROM users WHERE email = $1",
-            registration.email
-        )
+        await cursor.execute("SELECT id FROM users WHERE email = %s", (registration.email,))
+        existing_user = await cursor.fetchone()
         
         if existing_user:
             raise HTTPException(
@@ -316,93 +352,86 @@ async def register_user(registration: Registration):
         password_hash = hash_password(registration.password)
         
         try:
-            # Start transaction
-            async with conn.transaction():
-                # Insert new user with auto-detected role
-                result = await conn.fetchrow("""
-                INSERT INTO users (
-                    email, password_hash, role, first_name, last_name, 
-                    is_active, created_at
-                ) VALUES ($1, $2, $3, $4, $5, true, CURRENT_TIMESTAMP)
-                RETURNING id, email, role, first_name, last_name, created_at
-                """, 
-                registration.email, 
-                password_hash, 
-                role,
-                registration.first_name.strip(),
-                registration.last_name.strip())
-                
-                if role == 'doctor':
-                    # Doctor-specific validation
-                    if not registration.medical_license or not registration.specialization:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="Medical license and specialization are required for doctor registration"
-                        )
-                    
-                    # Check if medical license already exists
-                    existing_license = await conn.fetchval(
-                        "SELECT COUNT(*) FROM doctors WHERE medical_license = $1",
-                        registration.medical_license
+            # Insert new user with auto-detected role
+            await cursor.execute("""
+            INSERT INTO users (
+                email, password_hash, role, first_name, last_name, 
+                is_active, created_at
+            ) VALUES (%s, %s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP)
+            """, 
+            registration.email, 
+            password_hash, 
+            role,
+            registration.first_name.strip(),
+            registration.last_name.strip())
+            
+            # Get the inserted user ID
+            await cursor.execute("SELECT id, email, role, first_name, last_name, created_at FROM users WHERE email = %s", (registration.email,))
+            result = await cursor.fetchone()
+            
+            if role == 'doctor':
+                # Doctor-specific validation
+                if not registration.medical_license or not registration.specialization:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Medical license and specialization are required for doctor registration"
                     )
-                    
-                    if existing_license > 0:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="Medical license already registered"
-                        )
-                    
-                    # Create doctor profile
-                    await conn.execute("""
-                    INSERT INTO doctors (user_id, medical_license, specialization)
-                    VALUES ($1, $2, $3)
-                    """, result['id'], registration.medical_license.strip(), registration.specialization.strip())
-                    
-                    print(f"✅ Doctor profile created for {registration.email}")
-                else:
-                    # Patient-specific validation
-                    if not registration.date_of_birth:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="Date of birth is required for patient registration"
-                        )
-                    
-                    # Convert date string to date object
-                    try:
-                        dob_date = datetime.strptime(registration.date_of_birth, "%Y-%m-%d").date()
-                    except ValueError:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="Invalid date format. Please use YYYY-MM-DD format."
-                        )
-                    
-                    # Create patient profile
-                    await conn.execute("""
-                    INSERT INTO patients (user_id, date_of_birth, phone)
-                    VALUES ($1, $2, $3)
-                    """, result['id'], dob_date, registration.phone or None)
-                    
-                    print(f"✅ Patient profile created for {registration.email}")
+                
+                # Check if medical license already exists
+                await cursor.execute("SELECT COUNT(*) FROM doctors WHERE medical_license = %s", (registration.medical_license,))
+                existing_license = (await cursor.fetchone())[0]
+                
+                if existing_license > 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Medical license already registered"
+                    )
+                
+                # Create doctor profile
+                await cursor.execute("""
+                INSERT INTO doctors (user_id, medical_license, specialization)
+                VALUES (%s, %s, %s)
+                """, result[0], registration.medical_license.strip(), registration.specialization.strip())
+                
+                print(f"✅ Doctor profile created for {registration.email}")
+            else:
+                # Patient-specific validation
+                if not registration.date_of_birth:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Date of birth is required for patient registration"
+                    )
+                
+                # Convert date string to date object
+                try:
+                    dob_date = datetime.strptime(registration.date_of_birth, "%Y-%m-%d").date()
+                except ValueError:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid date format. Please use YYYY-MM-DD format."
+                    )
+                
+                # Create patient profile
+                await cursor.execute("""
+                INSERT INTO patients (user_id, date_of_birth, phone)
+                VALUES (%s, %s, %s)
+                """, result[0], dob_date, registration.phone or None)
+                
+                print(f"✅ Patient profile created for {registration.email}")
         
-        except asyncpg.exceptions.UniqueViolationError as e:
-            if 'users_email_key' in str(e):
+        except Exception as e:
+            print(f"Registration error details: {e}")
+            if "Duplicate entry" in str(e) and "email" in str(e):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Email already registered"
                 )
-            elif 'doctors_medical_license_key' in str(e):
+            elif "Duplicate entry" in str(e) and "medical_license" in str(e):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Medical license already registered"
                 )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Registration failed. Please try again."
-                )
-        except Exception as e:
-            print(f"Registration error details: {e}")
-            if "Invalid date format" in str(e):
+            elif "Invalid date format" in str(e):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid date format. Please use YYYY-MM-DD format."
@@ -411,21 +440,24 @@ async def register_user(registration: Registration):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Registration failed. Please try again."
             )
+        finally:
+            if cursor:
+                await cursor.close()
         
         # Prepare response
-        full_name = f"{result['first_name']} {result['last_name']}"
+        full_name = f"{result[2]} {result[3]}"  # first_name, last_name from tuple
         if role == 'doctor':
             full_name = f"Dr. {full_name}"
         
         user_response = {
-            "id": result['id'],
-            "email": result['email'],
-            "role": result['role'],
-            "first_name": result['first_name'],
-            "last_name": result['last_name'],
+            "id": result[0],
+            "email": result[1],
+            "role": result[2],
+            "first_name": result[2],
+            "last_name": result[3],
             "full_name": full_name,
             "is_active": True,
-            "created_at": result['created_at'].isoformat() if result['created_at'] else None
+            "created_at": result[4].isoformat() if result[4] else None
         }
         
         role_message = "Doctor account created successfully" if role == 'doctor' else "Patient account created successfully"
@@ -434,13 +466,13 @@ async def register_user(registration: Registration):
             "success": True,
             "user": user_response,
             "message": role_message,
-            "token": f"{role}_token_{result['id']}_{datetime.now().timestamp()}",
+            "token": f"{role}_token_{result[0]}_{datetime.now().timestamp()}",
             "educational_note": "Educational account created - not for real medical use"
         }
 
 @app.post("/api/auth/login", response_model=Dict[str, Any])
 async def login(login_data: UserLogin):
-    """Authenticate user with PostgreSQL - NO AUTO-REGISTRATION"""
+    """Authenticate user with MySQL - NO AUTO-REGISTRATION"""
     print("=" * 50)
     print(f"🔐 LOGIN ATTEMPT")
     print(f"📧 Email: '{login_data.email}'")
@@ -472,11 +504,11 @@ async def login(login_data: UserLogin):
     pool = await get_connection()
     
     async with pool.acquire() as conn:
+        cursor = await conn.cursor()
+        
         # Find user - must exist in database
-        user = await conn.fetchrow(
-            "SELECT * FROM users WHERE email = $1 AND is_active = true",
-            login_data.email.strip()
-        )
+        await cursor.execute("SELECT * FROM users WHERE email = %s AND is_active = TRUE", (login_data.email.strip(),))
+        user = await cursor.fetchone()
         
         if not user:
             print(f"❌ USER NOT FOUND: {login_data.email}")
@@ -493,43 +525,47 @@ async def login(login_data: UserLogin):
                 detail=f"User not found. {suggestion}"
             )
         
-        print(f"✅ User found: {user['email']} (Role: {user['role']})")
+        print(f"✅ User found: {user[1]} (Role: {user[3]})")
         
         # Calculate hash of input password
         input_hash = hash_password(login_data.password.strip())
         
-        if input_hash != user['password_hash']:
+        if input_hash != user[2]:  # password_hash is at index 2
             print(f"❌ PASSWORD MISMATCH!")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
             )
         
-        print(f"🎉 LOGIN SUCCESSFUL for {user['email']}!")
+        print(f"🎉 LOGIN SUCCESSFUL for {user[1]}!")
         print("=" * 50)
         
         # Prepare user response
-        full_name = f"{user['first_name']} {user['last_name']}"
-        if user['role'] == 'doctor':
+        full_name = f"{user[3]} {user[4]}"  # first_name, last_name
+        if user[3] == 'doctor':
             full_name = f"Dr. {full_name}"
         
         user_response = {
-            "id": user['id'],
-            "email": user['email'],
-            "role": user['role'],
-            "first_name": user['first_name'],
-            "last_name": user['last_name'],
+            "id": user[0],
+            "email": user[1],
+            "role": user[3],
+            "first_name": user[3],
+            "last_name": user[4],
             "full_name": full_name,
-            "is_active": user['is_active'],
-            "created_at": user['created_at'].isoformat() if user['created_at'] else None
+            "is_active": user[5],
+            "created_at": user[6].isoformat() if user[6] else None
         }
         
-        return {
-            "success": True,
-            "user": user_response,
-            "message": "Login successful",
-            "token": f"auth-token-{user['id']}-{datetime.now().timestamp()}"
-        }
+        try:
+            return {
+                "success": True,
+                "user": user_response,
+                "message": "Login successful",
+                "token": f"auth-token-{user[0]}-{datetime.now().timestamp()}"
+            }
+        finally:
+            if cursor:
+                await cursor.close()
 
 # [Keep all other endpoints the same as before...]
 

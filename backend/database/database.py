@@ -5,15 +5,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# MySQL XAMPP Configuration
+# PHP MySQL Database Configuration
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
 MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
 MYSQL_USER = os.getenv("MYSQL_USER", "root")
 MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "")
 MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "medical_center")
 
-# Common XAMPP MySQL passwords to try
-PASSWORD_OPTIONS = ["", "root", "admin", "password"]
+# Common PHP MySQL passwords to try
+PASSWORD_OPTIONS = ["", "root", "admin", "password", "123456", "mysql"]
 
 async def get_db_connection():
     """Get a MySQL database connection - try different passwords"""
@@ -27,7 +27,7 @@ async def get_db_connection():
                 db=MYSQL_DATABASE,
                 autocommit=True
             )
-            print(f"✅ Connected to MySQL XAMPP with password: {'[empty]' if password == '' else password}")
+            print(f"✅ Connected to PHP MySQL with password: {'[empty]' if password == '' else password}")
             return conn
         except Exception as e:
             print(f"❌ Failed with password '{'empty' if password == '' else password}': {e}")
@@ -50,13 +50,13 @@ async def get_db_connection():
         return conn
     except Exception as e:
         print(f"❌ All connection attempts failed. Last error: {e}")
-        raise Exception(f"Cannot connect to MySQL XAMPP. Please check: 1) XAMPP is running, 2) MySQL service is started, 3) Credentials are correct. Error: {e}")
+        raise Exception(f"Cannot connect to PHP MySQL. Please check: 1) MySQL server is running, 2) Database exists, 3) Credentials are correct. Error: {e}")
 
 async def init_database():
     """Initialize MySQL database with tables and demo data"""
     conn = None
     try:
-        print("🔧 Initializing MySQL XAMPP database...")
+        print("🔧 Initializing PHP MySQL database...")
         
         # First connect without specifying database to create it
         try:
@@ -208,13 +208,13 @@ async def init_database():
             raise
         
     except Exception as e:
-        print(f"❌ MySQL connection failed: {e}")
+        print(f"❌ PHP MySQL connection failed: {e}")
         print("\n💡 Try these fixes:")
-        print("1. Make sure XAMPP is installed and running")
-        print("2. Start MySQL service in XAMPP Control Panel")
-        print("3. Check if MySQL is running on port 3306")
-        print("4. Verify MySQL credentials (usually root with no password)")
-        print("5. Try accessing phpMyAdmin to verify MySQL is working")
+        print("1. Make sure MySQL server is installed and running")
+        print("2. Check if MySQL is running on port 3306")
+        print("3. Verify MySQL credentials and database permissions")
+        print("4. Try accessing your MySQL admin panel (phpMyAdmin, cPanel, etc.)")
+        print("5. Check if database 'medical_center' exists or can be created")
         raise
     finally:
         if conn:
