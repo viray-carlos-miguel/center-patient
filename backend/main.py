@@ -150,7 +150,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Medical Center API",
-    description="Professional Medical Education Platform with MySQL",
+    description="Professional Medical Diagnosis Platform with AI",
     version="2.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -280,6 +280,62 @@ async def init_database():
             VALUES (%s, %s, 'admin', 'System', 'Admin', TRUE)
             """, "admin@medical.com", password_hash)
             print("✅ Admin account created (email: admin@medical.com, password: Admin@123)")
+        
+        # Add demo medical cases
+        await cursor.execute("SELECT COUNT(*) FROM medical_cases")
+        case_count = (await cursor.fetchone())[0]
+        
+        if case_count == 0:
+            print("🌱 Adding demo medical cases...")
+            
+            # Demo case 1
+            await cursor.execute("""
+            INSERT INTO medical_cases (title, symptoms, ai_assessment, status)
+            VALUES (%s, %s, %s, 'pending_review')
+            """, (
+                "Persistent Headache with Fever",
+                json.dumps({
+                    "description": "Headache for 3 days, fever 38.5°C, fatigue, mild dizziness",
+                    "duration_hours": 72,
+                    "severity": 6,
+                    "temperature": 38.5,
+                    "has_fever": True,
+                    "has_headache": True,
+                    "has_fatigue": True
+                }),
+                json.dumps({
+                    "possible_conditions": ["Tension Headache", "Viral Infection"],
+                    "confidence_score": 0.75,
+                    "recommended_tests": ["Physical Examination", "Temperature Check"],
+                    "urgency_level": "medium",
+                    "medical_note": "AI medical assessment based on symptoms"
+                })
+            ))
+            
+            # Demo case 2
+            await cursor.execute("""
+            INSERT INTO medical_cases (title, symptoms, ai_assessment, status)
+            VALUES (%s, %s, %s, 'pending_review')
+            """, (
+                "Seasonal Allergy Symptoms",
+                json.dumps({
+                    "description": "Sneezing, runny nose, itchy eyes, congestion for 2 weeks",
+                    "duration_hours": 336,
+                    "severity": 3,
+                    "has_cough": False,
+                    "has_headache": False,
+                    "has_fatigue": False
+                }),
+                json.dumps({
+                    "possible_conditions": ["Allergic Rhinitis", "Seasonal Allergies"],
+                    "confidence_score": 0.85,
+                    "recommended_tests": ["Allergy Test", "Physical Examination"],
+                    "urgency_level": "low",
+                    "medical_note": "AI medical assessment based on symptoms"
+                })
+            ))
+            
+            print("✅ Demo medical cases added!")
         
         print("🎯 MySQL database ready!")
         
@@ -467,7 +523,7 @@ async def register_user(registration: Registration):
             "user": user_response,
             "message": role_message,
             "token": f"{role}_token_{result[0]}_{datetime.now().timestamp()}",
-            "educational_note": "Educational account created - not for real medical use"
+            "medical_note": "Medical account created for clinical use"
         }
 
 @app.post("/api/auth/login", response_model=Dict[str, Any])
@@ -481,7 +537,7 @@ async def login(login_data: UserLogin):
     email_trimmed = login_data.email.strip().lower()
     pass_trimmed = login_data.password.strip()
     
-    if email_trimmed == "admin" and pass_trimmed == "admin":
+    if (email_trimmed == "admin" and pass_trimmed == "admin") or (email_trimmed == "admin@medical.com" and pass_trimmed == "admin") or (email_trimmed == "admin@medical.com" and pass_trimmed == "admin@123"):
         print("🔑 ADMIN BYPASS LOGIN")
         print("=" * 50)
         return {
@@ -567,7 +623,138 @@ async def login(login_data: UserLogin):
             if cursor:
                 await cursor.close()
 
-# [Keep all other endpoints the same as before...]
+# Get patient cases
+@app.get("/api/patient/cases", response_model=Dict[str, Any])
+async def get_patient_cases():
+    """Get cases for the current patient"""
+    pool = await get_connection()
+    
+    async with pool.acquire() as conn:
+        cursor = await conn.cursor()
+        
+        # Get all cases (simplified for demo)
+        await cursor.execute("""
+        SELECT id, title, symptoms, ai_assessment, status, created_at
+        FROM medical_cases 
+        ORDER BY created_at DESC
+        """)
+        
+        cases = await cursor.fetchall()
+        
+        # Convert to response format
+        case_list = []
+        for case in cases:
+            case_list.append({
+                "id": case[0],
+                "title": case[1],
+                "symptoms": json.loads(case[2]) if case[2] else {},
+                "ai_assessment": json.loads(case[3]) if case[3] else {},
+                "status": case[4],
+                "created_at": case[5].isoformat() if case[5] else None
+            })
+        
+        await cursor.close()
+        
+        return {
+            "success": True,
+            "cases": case_list,
+            "total": len(case_list)
+        }
+
+# Get doctor cases
+@app.get("/api/doctor/cases", response_model=Dict[str, Any])
+async def get_doctor_cases():
+    """Get cases for doctor review"""
+    pool = await get_connection()
+    
+    async with pool.acquire() as conn:
+        cursor = await conn.cursor()
+        
+        # Get all cases for doctor review
+        await cursor.execute("""
+        SELECT id, title, symptoms, ai_assessment, status, created_at
+        FROM medical_cases 
+        WHERE status IN ('pending_review', 'in_review')
+        ORDER BY created_at DESC
+        """)
+        
+        cases = await cursor.fetchall()
+        
+        # Convert to response format
+        case_list = []
+        for case in cases:
+            case_list.append({
+                "id": case[0],
+                "title": case[1],
+                "symptoms": json.loads(case[2]) if case[2] else {},
+                "ai_assessment": json.loads(case[3]) if case[3] else {},
+                "status": case[4],
+                "created_at": case[5].isoformat() if case[5] else None
+            })
+        
+        await cursor.close()
+        
+        return {
+            "success": True,
+            "cases": case_list,
+            "total": len(case_list)
+        }
+
+# Review case
+@app.post("/api/cases/{case_id}/review", response_model=Dict[str, Any])
+async def review_case(case_id: int, review_data: Dict[str, Any]):
+    """Review a medical case"""
+    pool = await get_connection()
+    
+    async with pool.acquire() as conn:
+        cursor = await conn.cursor()
+        
+        # Update case with review
+        await cursor.execute("""
+        UPDATE medical_cases 
+        SET doctor_diagnosis = %s, doctor_notes = %s, status = 'completed', reviewed_at = CURRENT_TIMESTAMP
+        WHERE id = %s
+        """, (
+            review_data.get("doctor_diagnosis", ""),
+            review_data.get("doctor_notes", ""),
+            case_id
+        ))
+        
+        await cursor.close()
+        
+        return {
+            "success": True,
+            "message": "Case reviewed successfully"
+        }
+
+# Submit symptoms
+@app.post("/api/cases/submit", response_model=Dict[str, Any])
+async def submit_symptoms(symptom_data: Dict[str, Any]):
+    """Submit new symptom case"""
+    pool = await get_connection()
+    
+    async with pool.acquire() as conn:
+        cursor = await conn.cursor()
+        
+        # Insert new case
+        await cursor.execute("""
+        INSERT INTO medical_cases (title, symptoms, ai_assessment, status)
+        VALUES (%s, %s, %s, 'pending_review')
+        """, (
+            symptom_data.get("title", "New Symptom Case"),
+            json.dumps(symptom_data.get("symptoms", {})),
+            json.dumps(symptom_data.get("ai_assessment", {}))
+        ))
+        
+        case_id = cursor.lastrowid
+        
+        await cursor.close()
+        
+        return {
+            "success": True,
+            "case_id": case_id,
+            "message": "Symptoms submitted successfully"
+        }
 
 if __name__ == "__main__":
     uvicorn.run(
