@@ -4,23 +4,25 @@
 @import "tailwindcss/utilities";
 
 :root {
-  --primary: #3b82f6;
-  --primary-dark: #2563eb;
-  --primary-glow: rgba(59, 130, 246, 0.15);
-  --secondary: #10b981;
-  --accent: #8b5cf6;
+  --primary: #8b5cf6;
+  --primary-dark: #7c3aed;
+  --primary-glow: rgba(139, 92, 246, 0.25);
+  --secondary: #3b82f6;
+  --accent: #06b6d4;
   --background: #0a0e1a;
   --surface: #111827;
   --surface-light: #1e293b;
   --surface-lighter: #273548;
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
   --border: #1e293b;
   --border-light: #334155;
   --success: #10b981;
   --warning: #f59e0b;
   --error: #ef4444;
+  --dx-gradient: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 50%, #8b5cf6 100%);
+  --dx-shadow: 0 20px 40px rgba(139, 92, 246, 0.15);
 }
 
 /* Base styles */
@@ -367,6 +369,98 @@ h3 {
 .medical-icon {
   width: 1.25rem;
   height: 1.25rem;
+}
+
+/* DXscope Elegant Design System */
+.dx-gradient {
+  background: var(--dx-gradient);
+}
+
+.dx-shadow {
+  box-shadow: var(--dx-shadow);
+}
+
+.dx-glass {
+  background: rgba(17, 24, 39, 0.4);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(139, 92, 246, 0.1);
+}
+
+.dx-card {
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.8), rgba(30, 41, 59, 0.6));
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: 1rem;
+  box-shadow: 0 10px 30px rgba(139, 92, 246, 0.1);
+  transition: all 0.3s ease;
+}
+
+.dx-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 40px rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.25);
+}
+
+.dx-button {
+  background: var(--dx-gradient);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  color: white;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.2);
+}
+
+.dx-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 25px rgba(139, 92, 246, 0.3);
+  border-color: rgba(139, 92, 246, 0.5);
+}
+
+.dx-text-gradient {
+  background: var(--dx-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Elegant animations */
+@keyframes dx-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+.dx-float {
+  animation: dx-float 6s ease-in-out infinite;
+}
+
+@keyframes dx-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.dx-pulse {
+  animation: dx-pulse 3s ease-in-out infinite;
+}
+
+/* Medical theme enhancements */
+.dx-medical-icon {
+  background: var(--dx-gradient);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  color: white;
+  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.2);
+}
+
+.dx-status-online {
+  background: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+}
+
+.dx-status-busy {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
 }
 
 /* Responsive design helpers */

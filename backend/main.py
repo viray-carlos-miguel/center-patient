@@ -149,8 +149,8 @@ async def lifespan(app: FastAPI):
     print("👋 Shutting down...")
 
 app = FastAPI(
-    title="Medical Center API",
-    description="Professional Medical Diagnosis Platform with AI",
+    title="DXscope API",
+    description="Advanced Medical Diagnosis Platform with AI-Powered Analysis",
     version="2.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -365,10 +365,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 @app.get("/")
 async def root():
     return {
-        "message": "Medical Center API",
+        "message": "DXscope API",
         "version": "2.0.0",
         "database": "MySQL",
-        "status": "operational"
+        "status": "operational",
+        "platform": "Advanced Medical Diagnosis Platform"
     }
 
 @app.post("/api/auth/register", response_model=Dict[str, Any])
