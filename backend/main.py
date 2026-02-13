@@ -44,6 +44,18 @@ except ImportError as e:
             }
     predictor = SimplePredictor()
 
+# Import ML Prediction System
+try:
+    from ml_system.prediction_engine import MedicalPredictionEngine
+    from ml_system.api_integration import ml_router
+    ml_engine = MedicalPredictionEngine()
+    ML_ENABLED = True
+    print("✅ ML Prediction System initialized successfully")
+except ImportError as e:
+    print(f"⚠️ ML System not found: {e}")
+    ML_ENABLED = False
+    ml_engine = None
+
 # MySQL Database Configuration
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
 MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
@@ -150,7 +162,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="DXscope API",
-    description="Advanced Medical Diagnosis Platform with AI-Powered Analysis",
+    description="Advanced Medical Diagnosis Platform with AI-Powered Analysis and ML Predictions",
     version="2.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -165,6 +177,11 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
+
+# Include ML router if enabled
+if ML_ENABLED and ml_engine:
+    app.include_router(ml_router)
+    print("✅ ML API routes included")
 
 # Database Connection Pool
 pool = None
