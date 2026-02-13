@@ -17,7 +17,7 @@ class GeminiClinicalPredictor:
         genai.configure(api_key=api_key)
         
         # Initialize the model
-        self.model = genai.GenerativeModel('gemini-pro')
+        self.model = genai.GenerativeModel('models/gemini-2.0-flash')
         
         # Medical context prompt
         self.system_prompt = """You are a medical AI assistant for educational purposes only. 

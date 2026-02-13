@@ -278,7 +278,7 @@ async def init_database():
             await cursor.execute("""
             INSERT INTO users (email, password_hash, role, first_name, last_name, is_active)
             VALUES (%s, %s, 'admin', 'System', 'Admin', TRUE)
-            """, "admin@medical.com", password_hash)
+            """, ("admin@medical.com", password_hash))
             print("✅ Admin account created (email: admin@medical.com, password: Admin@123)")
         
         # Add demo medical cases
@@ -415,15 +415,16 @@ async def register_user(registration: Registration):
                 email, password_hash, role, first_name, last_name, 
                 is_active, created_at
             ) VALUES (%s, %s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP)
-            """, 
-            registration.email, 
-            password_hash, 
-            role,
-            registration.first_name.strip(),
-            registration.last_name.strip())
+            """, (
+                registration.email, 
+                password_hash, 
+                role,
+                registration.first_name.strip(),
+                registration.last_name.strip()
+            ))
             
             # Get the inserted user ID
-            await cursor.execute("SELECT id, email, role, first_name, last_name, created_at FROM users WHERE email = %s", (registration.email,))
+            await cursor.execute("SELECT * FROM users WHERE email = %s", (registration.email,))
             result = await cursor.fetchone()
             
             if role == 'doctor':
@@ -448,7 +449,7 @@ async def register_user(registration: Registration):
                 await cursor.execute("""
                 INSERT INTO doctors (user_id, medical_license, specialization)
                 VALUES (%s, %s, %s)
-                """, result[0], registration.medical_license.strip(), registration.specialization.strip())
+                """, (result[0], registration.medical_license.strip(), registration.specialization.strip()))
                 
                 print(f"✅ Doctor profile created for {registration.email}")
             else:
@@ -472,7 +473,7 @@ async def register_user(registration: Registration):
                 await cursor.execute("""
                 INSERT INTO patients (user_id, date_of_birth, phone)
                 VALUES (%s, %s, %s)
-                """, result[0], dob_date, registration.phone or None)
+                """, (result[0], dob_date, registration.phone or None))
                 
                 print(f"✅ Patient profile created for {registration.email}")
         
@@ -501,20 +502,21 @@ async def register_user(registration: Registration):
             if cursor:
                 await cursor.close()
         
-        # Prepare response
-        full_name = f"{result[2]} {result[3]}"  # first_name, last_name from tuple
+        # Prepare response - fix field mapping from database tuple
+        # result tuple: (id, email, password_hash, role, first_name, last_name, is_active, created_at, updated_at)
+        full_name = f"{result[4]} {result[5]}"  # first_name, last_name from tuple
         if role == 'doctor':
             full_name = f"Dr. {full_name}"
         
         user_response = {
             "id": result[0],
             "email": result[1],
-            "role": result[2],
-            "first_name": result[2],
-            "last_name": result[3],
+            "role": result[3],
+            "first_name": result[4],
+            "last_name": result[5],
             "full_name": full_name,
-            "is_active": True,
-            "created_at": result[4].isoformat() if result[4] else None
+            "is_active": result[6],
+            "created_at": result[7].isoformat() if result[7] else None
         }
         
         role_message = "Doctor account created successfully" if role == 'doctor' else "Patient account created successfully"
