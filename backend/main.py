@@ -15,46 +15,47 @@ import hashlib
 
 load_dotenv()
 
-# Import AI Predictor
-try:
-    from ai_system.core.gemini_predictor import GeminiClinicalPredictor
-    predictor = GeminiClinicalPredictor()
-    AI_ENABLED = True
-    print("✅ Gemini AI initialized successfully")
-except ImportError as e:
-    print(f"⚠️ Gemini module not found: {e}")
-    AI_ENABLED = False
-    # Fallback to simple predictor
-    class SimplePredictor:
-        def analyze_symptoms(self, symptoms, patient_info):
-            return {
-                "disease_predictions": [{
-                    "disease": "Common Cold",
-                    "confidence": 65.5,
-                    "matching_symptoms": [],
-                    "urgency": "low"
-                }],
-                "risk_assessment": {
-                    "risk_score": 1,
-                    "urgency_level": "low",
-                    "recommended_action": "Rest and monitor"
-                },
-                "confidence_score": 0.65,
-                "educational_notes": "AI analysis for educational purposes only"
-            }
-    predictor = SimplePredictor()
+# AI System Removed - Using ML and Rule-based Only
+AI_ENABLED = False
+predictor = None
+print("⚠️ AI System removed - Using ML and Rule-based analysis")
 
-# Import ML Prediction System
-try:
-    from ml_system.prediction_engine import MedicalPredictionEngine
-    from ml_system.api_integration import ml_router
-    ml_engine = MedicalPredictionEngine()
-    ML_ENABLED = True
-    print("✅ ML Prediction System initialized successfully")
-except ImportError as e:
-    print(f"⚠️ ML System not found: {e}")
-    ML_ENABLED = False
-    ml_engine = None
+# Fallback to simple predictor
+class SimplePredictor:
+    def analyze_symptoms(self, symptoms, patient_info):
+        return {
+            "disease_predictions": [{
+                "disease": "Common Cold",
+                "confidence": 65.5,
+                "matching_symptoms": [],
+                "urgency": "low"
+            }],
+            "risk_assessment": {
+                "risk_score": 1,
+                "urgency_level": "low",
+                "recommended_action": "Rest and monitor"
+            },
+            "confidence_score": 0.65,
+            "educational_notes": "AI analysis for educational purposes only"
+        }
+predictor = SimplePredictor()
+
+# Import ML Prediction System - Temporarily disabled for performance
+# try:
+#     from ml_system.prediction_engine import MedicalPredictionEngine
+#     from ml_system.api_integration import ml_router
+#     ml_engine = MedicalPredictionEngine()
+#     ML_ENABLED = True
+#     print("✅ ML Prediction System initialized successfully")
+# except Exception as e:
+#     print(f"⚠️ ML System disabled due to compatibility issue: {e}")
+#     ML_ENABLED = False
+#     ml_engine = None
+
+# Temporarily disable ML system for performance
+ML_ENABLED = False
+ml_engine = None
+print("⚠️ ML System temporarily disabled for performance")
 
 # MySQL Database Configuration
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
@@ -280,6 +281,10 @@ async def init_database():
             specialization VARCHAR(100) NOT NULL,
             years_of_experience INT DEFAULT 0,
             is_available BOOLEAN DEFAULT TRUE,
+            is_verified BOOLEAN DEFAULT FALSE,
+            admin_notes TEXT,
+            verified_at TIMESTAMP NULL,
+            verified_by INT REFERENCES users(id),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
@@ -305,12 +310,34 @@ async def init_database():
         if case_count == 0:
             print("🌱 Adding demo medical cases...")
             
+            # Check if demo patient already exists, if not create it
+            await cursor.execute("SELECT id FROM users WHERE email = %s", ("demo.patient@gmail.com",))
+            existing_patient = await cursor.fetchone()
+            
+            if existing_patient:
+                demo_patient_id = existing_patient[0]
+                print("✅ Using existing demo patient account")
+            else:
+                # Create demo patient user for the demo cases
+                await cursor.execute("""
+                INSERT INTO users (email, password_hash, role, first_name, last_name, is_active)
+                VALUES (%s, %s, %s, %s, %s, TRUE)
+                """, (
+                    "demo.patient@gmail.com",
+                    hash_password("Demo@123"),
+                    "patient",
+                    "Demo",
+                    "Patient"
+                ))
+                demo_patient_id = cursor.lastrowid
+                print("✅ Demo patient account created (email: demo.patient@gmail.com, password: Demo@123)")
+            
             # Demo case 1
             await cursor.execute("""
-            INSERT INTO medical_cases (title, symptoms, ai_assessment, status)
+            INSERT INTO medical_cases (patient_id, symptoms, ai_assessment, status)
             VALUES (%s, %s, %s, 'pending_review')
             """, (
-                "Persistent Headache with Fever",
+                demo_patient_id,
                 json.dumps({
                     "description": "Headache for 3 days, fever 38.5°C, fatigue, mild dizziness",
                     "duration_hours": 72,
@@ -331,10 +358,10 @@ async def init_database():
             
             # Demo case 2
             await cursor.execute("""
-            INSERT INTO medical_cases (title, symptoms, ai_assessment, status)
+            INSERT INTO medical_cases (patient_id, symptoms, ai_assessment, status)
             VALUES (%s, %s, %s, 'pending_review')
             """, (
-                "Seasonal Allergy Symptoms",
+                demo_patient_id,
                 json.dumps({
                     "description": "Sneezing, runny nose, itchy eyes, congestion for 2 weeks",
                     "duration_hours": 336,
@@ -533,7 +560,7 @@ async def register_user(registration: Registration):
             "last_name": result[5],
             "full_name": full_name,
             "is_active": result[6],
-            "created_at": result[7].isoformat() if result[7] else None
+            "created_at": result[7].isoformat() if result[7] and hasattr(result[7], 'isoformat') else str(result[7]) if result[7] else None
         }
         
         role_message = "Doctor account created successfully" if role == 'doctor' else "Patient account created successfully"
@@ -629,7 +656,7 @@ async def login(login_data: UserLogin):
             "last_name": user[4],
             "full_name": full_name,
             "is_active": user[5],
-            "created_at": user[6].isoformat() if user[6] else None
+            "created_at": user[6].isoformat() if user[6] and hasattr(user[6], 'isoformat') else str(user[6]) if user[6] else None
         }
         
         try:
@@ -670,7 +697,7 @@ async def get_patient_cases():
                 "symptoms": json.loads(case[2]) if case[2] else {},
                 "ai_assessment": json.loads(case[3]) if case[3] else {},
                 "status": case[4],
-                "created_at": case[5].isoformat() if case[5] else None
+                "created_at": case[5].isoformat() if case[5] and hasattr(case[5], 'isoformat') else str(case[5]) if case[5] else None
             })
         
         await cursor.close()
@@ -709,7 +736,7 @@ async def get_doctor_cases():
                 "symptoms": json.loads(case[2]) if case[2] else {},
                 "ai_assessment": json.loads(case[3]) if case[3] else {},
                 "status": case[4],
-                "created_at": case[5].isoformat() if case[5] else None
+                "created_at": case[5].isoformat() if case[5] and hasattr(case[5], 'isoformat') else str(case[5]) if case[5] else None
             })
         
         await cursor.close()
@@ -774,6 +801,252 @@ async def submit_symptoms(symptom_data: Dict[str, Any]):
             "success": True,
             "case_id": case_id,
             "message": "Symptoms submitted successfully"
+        }
+
+# ===== ADMIN MANAGEMENT ENDPOINTS =====
+
+@app.get("/api/admin/users", response_model=Dict[str, Any])
+async def get_all_users():
+    """Get all users (admin only)"""
+    pool = await get_connection()
+    
+    async with pool.acquire() as conn:
+        cursor = await conn.cursor()
+        
+        await cursor.execute("""
+        SELECT id, email, role, first_name, last_name, is_active, created_at
+        FROM users 
+        ORDER BY created_at DESC
+        """)
+        
+        users = await cursor.fetchall()
+        
+        # Convert to list of dictionaries
+        user_list = []
+        for user in users:
+            user_list.append({
+                "id": user[0],
+                "email": user[1],
+                "role": user[2],
+                "first_name": user[3],
+                "last_name": user[4],
+                "is_active": user[5],
+                "created_at": user[6].isoformat() if user[6] else None
+            })
+        
+        return {
+            "success": True,
+            "users": user_list,
+            "total": len(user_list)
+        }
+
+@app.get("/api/admin/doctors", response_model=Dict[str, Any])
+async def get_doctors_for_verification():
+    """Get all doctors for admin verification"""
+    pool = await get_connection()
+    
+    async with pool.acquire() as conn:
+        cursor = await conn.cursor()
+        
+        await cursor.execute("""
+        SELECT u.id, u.email, u.first_name, u.last_name, u.is_active, u.created_at,
+               d.medical_license, d.specialization, d.is_verified
+        FROM users u
+        LEFT JOIN doctors d ON u.id = d.user_id
+        WHERE u.role = 'doctor'
+        ORDER BY u.created_at DESC
+        """)
+        
+        doctors = await cursor.fetchall()
+        
+        # Convert to list of dictionaries
+        doctor_list = []
+        for doctor in doctors:
+            doctor_list.append({
+                "id": doctor[0],
+                "email": doctor[1],
+                "first_name": doctor[2],
+                "last_name": doctor[3],
+                "is_active": doctor[4],
+                "created_at": doctor[5].isoformat() if doctor[5] else None,
+                "medical_license": doctor[6],
+                "specialization": doctor[7],
+                "is_verified": bool(doctor[8]) if doctor[8] is not None else False
+            })
+        
+        return {
+            "success": True,
+            "doctors": doctor_list,
+            "total": len(doctor_list)
+        }
+
+@app.post("/api/admin/doctors/{doctor_id}/verify", response_model=Dict[str, Any])
+async def verify_doctor(doctor_id: int, verification_data: Dict[str, Any]):
+    """Verify or reject a doctor's credentials"""
+    pool = await get_connection()
+    
+    async with pool.acquire() as conn:
+        cursor = await conn.cursor()
+        
+        # Check if doctor exists
+        await cursor.execute("SELECT id, email FROM users WHERE id = %s AND role = 'doctor'", (doctor_id,))
+        doctor = await cursor.fetchone()
+        
+        if not doctor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Doctor not found"
+            )
+        
+        is_verified = verification_data.get("is_verified", False)
+        admin_notes = verification_data.get("admin_notes", "")
+        
+        # Update or create doctor verification record
+        await cursor.execute("""
+        INSERT INTO doctors (user_id, medical_license, specialization, is_verified, admin_notes, verified_at)
+        VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+        ON DUPLICATE KEY UPDATE
+        is_verified = %s,
+        admin_notes = %s,
+        verified_at = CURRENT_TIMESTAMP
+        """, (
+            doctor_id,
+            verification_data.get("medical_license", ""),
+            verification_data.get("specialization", ""),
+            is_verified,
+            admin_notes,
+            is_verified,
+            admin_notes
+        ))
+        
+        action = "verified" if is_verified else "rejected"
+        print(f"🔍 Admin {action} doctor: {doctor[1]} (ID: {doctor_id})")
+        
+        return {
+            "success": True,
+            "message": f"Doctor {action} successfully",
+            "doctor_id": doctor_id,
+            "is_verified": is_verified
+        }
+
+@app.post("/api/admin/users/{user_id}/toggle-status", response_model=Dict[str, Any])
+async def toggle_user_status(user_id: int):
+    """Enable or disable a user account"""
+    pool = await get_connection()
+    
+    async with pool.acquire() as conn:
+        cursor = await conn.cursor()
+        
+        # Get current status
+        await cursor.execute("SELECT email, is_active FROM users WHERE id = %s", (user_id,))
+        user = await cursor.fetchone()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Toggle status
+        new_status = not user[1]
+        
+        await cursor.execute("""
+        UPDATE users 
+        SET is_active = %s 
+        WHERE id = %s
+        """, (new_status, user_id))
+        
+        action = "enabled" if new_status else "disabled"
+        print(f"🔧 Admin {action} user: {user[0]} (ID: {user_id})")
+        
+        return {
+            "success": True,
+            "message": f"User {action} successfully",
+            "user_id": user_id,
+            "is_active": new_status
+        }
+
+@app.get("/api/admin/stats", response_model=Dict[str, Any])
+async def get_admin_stats():
+    """Get system statistics for admin dashboard"""
+    pool = await get_connection()
+    
+    async with pool.acquire() as conn:
+        cursor = await conn.cursor()
+        
+        # Get user counts
+        await cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'patient'")
+        patient_count = (await cursor.fetchone())[0]
+        
+        await cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'doctor'")
+        doctor_count = (await cursor.fetchone())[0]
+        
+        await cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
+        admin_count = (await cursor.fetchone())[0]
+        
+        # Get verified doctors count
+        await cursor.execute("""
+        SELECT COUNT(*) FROM doctors d 
+        JOIN users u ON d.user_id = u.id 
+        WHERE u.role = 'doctor' AND d.is_verified = TRUE
+        """)
+        verified_doctors = (await cursor.fetchone())[0]
+        
+        # Get pending cases
+        await cursor.execute("SELECT COUNT(*) FROM medical_cases WHERE status = 'pending_review'")
+        pending_cases = (await cursor.fetchone())[0]
+        
+        # Get total cases
+        await cursor.execute("SELECT COUNT(*) FROM medical_cases")
+        total_cases = (await cursor.fetchone())[0]
+        
+        return {
+            "success": True,
+            "stats": {
+                "total_patients": patient_count,
+                "total_doctors": doctor_count,
+                "verified_doctors": verified_doctors,
+                "pending_doctors": doctor_count - verified_doctors,
+                "total_admins": admin_count,
+                "pending_cases": pending_cases,
+                "total_cases": total_cases
+            }
+        }
+
+@app.get("/api/admin/login-activity", response_model=Dict[str, Any])
+async def get_login_activity():
+    """Get recent login activity (admin only)"""
+    # This is a simplified version - in production you'd have a proper login logs table
+    pool = await get_connection()
+    
+    async with pool.acquire() as conn:
+        cursor = await conn.cursor()
+        
+        # Get recent user registrations as activity indicator
+        await cursor.execute("""
+        SELECT email, role, created_at, is_active
+        FROM users 
+        ORDER BY created_at DESC 
+        LIMIT 20
+        """)
+        
+        recent_users = await cursor.fetchall()
+        
+        # Convert to list of dictionaries
+        activity_list = []
+        for user in recent_users:
+            activity_list.append({
+                "email": user[0],
+                "role": user[1],
+                "activity_type": "registration",
+                "timestamp": user[2].isoformat() if user[2] else None,
+                "is_active": user[3]
+            })
+        
+        return {
+            "success": True,
+            "activities": activity_list,
+            "total": len(activity_list)
         }
 
 if __name__ == "__main__":
