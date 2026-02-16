@@ -13,6 +13,9 @@ from dotenv import load_dotenv
 import json
 import hashlib
 
+# Import email service
+from email_service import email_service
+
 load_dotenv()
 
 # AI System Removed - Using ML and Rule-based Only
@@ -425,11 +428,17 @@ async def register_user(registration: Registration):
             detail="Must agree to terms and acknowledge educational purpose"
         )
     
-    # Auto-detect role based on email domain
+    # Auto-detect role based on email domain and required fields
     email = registration.email.lower()
-    if '@medical.com' in email or '@medicalcenter.com' in email or '@hospital.com' in email:
+    
+    # Check if this is a doctor registration (has medical license and specialization)
+    if (registration.medical_license and registration.specialization and 
+        registration.medical_license.strip() and registration.specialization.strip()):
         role = 'doctor'
         print(f"🎓 Detected doctor registration: {email}")
+    elif '@medical.com' in email or '@medicalcenter.com' in email or '@hospital.com' in email:
+        role = 'doctor'
+        print(f"🎓 Detected doctor registration (professional email): {email}")
     else:
         role = 'patient'
         print(f"👤 Detected patient registration: {email}")
@@ -453,18 +462,22 @@ async def register_user(registration: Registration):
         password_hash = hash_password(registration.password)
         
         try:
+            # Set active status based on role (doctors need verification)
+            is_active = False if role == 'doctor' else True
+            
             # Insert new user with auto-detected role
             await cursor.execute("""
             INSERT INTO users (
                 email, password_hash, role, first_name, last_name, 
                 is_active, created_at
-            ) VALUES (%s, %s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP)
+            ) VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
             """, (
                 registration.email, 
                 password_hash, 
                 role,
                 registration.first_name.strip(),
-                registration.last_name.strip()
+                registration.last_name.strip(),
+                is_active
             ))
             
             # Get the inserted user ID
@@ -563,14 +576,37 @@ async def register_user(registration: Registration):
             "created_at": result[7].isoformat() if result[7] and hasattr(result[7], 'isoformat') else str(result[7]) if result[7] else None
         }
         
-        role_message = "Doctor account created successfully" if role == 'doctor' else "Patient account created successfully"
+        # Prepare response based on role and verification status
+        role_message = ""
+        medical_note = ""
+        
+        if role == 'doctor':
+            role_message = "Doctor registration submitted successfully - awaiting admin verification"
+            medical_note = "Your account is pending verification. You will receive an email once approved."
+        else:
+            role_message = "Patient account created successfully"
+            medical_note = "Your account is ready for immediate use"
+            
+            # Send welcome email to patient
+            patient_name = f"{result[4]} {result[5]}"
+            patient_email = result[1]
+            
+            subject, text_content, html_content = email_service.get_patient_welcome_template(patient_name, patient_email)
+            email_sent = await email_service.send_email(patient_email, subject, html_content, text_content)
+            
+            if email_sent:
+                print(f"✅ Welcome email sent to: {patient_email}")
+            else:
+                print(f"❌ Failed to send welcome email to: {patient_email}")
         
         return {
             "success": True,
             "user": user_response,
             "message": role_message,
             "token": f"{role}_token_{result[0]}_{datetime.now().timestamp()}",
-            "medical_note": "Medical account created for clinical use"
+            "medical_note": medical_note,
+            "requires_verification": role == 'doctor',
+            "email_sent": role == 'patient'  # Only true for patients since doctors get email after verification
         }
 
 @app.post("/api/auth/login", response_model=Dict[str, Any])
@@ -609,8 +645,8 @@ async def login(login_data: UserLogin):
     async with pool.acquire() as conn:
         cursor = await conn.cursor()
         
-        # Find user - must exist in database
-        await cursor.execute("SELECT * FROM users WHERE email = %s AND is_active = TRUE", (login_data.email.strip(),))
+        # Find user - check if exists (including inactive doctors for better error messages)
+        await cursor.execute("SELECT * FROM users WHERE email = %s", (login_data.email.strip(),))
         user = await cursor.fetchone()
         
         if not user:
@@ -627,6 +663,21 @@ async def login(login_data: UserLogin):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"User not found. {suggestion}"
             )
+        
+        # Check if user is active
+        if not user[6]:  # is_active field
+            print(f"❌ USER INACTIVE: {login_data.email} (Role: {user[3]})")
+            
+            if user[3] == 'doctor':
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Your doctor account is pending verification. Please wait for admin approval before logging in."
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Your account has been deactivated. Please contact support."
+                )
         
         print(f"✅ User found: {user[1]} (Role: {user[3]})")
         
@@ -805,6 +856,74 @@ async def submit_symptoms(symptom_data: Dict[str, Any]):
 
 # ===== ADMIN MANAGEMENT ENDPOINTS =====
 
+@app.get("/api/admin/health", response_model=Dict[str, Any])
+async def admin_health_check():
+    """Health check for admin endpoints"""
+    try:
+        pool = await get_connection()
+        async with pool.acquire() as conn:
+            cursor = await conn.cursor()
+            await cursor.execute("SELECT 1")
+            result = await cursor.fetchone()
+            
+        return {
+            "success": True,
+            "message": "Admin endpoints are healthy",
+            "database": "connected",
+            "test_query": result[0] if result else None
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": "Admin endpoints error",
+            "error": str(e)
+        }
+
+@app.post("/api/admin/create-admin", response_model=Dict[str, Any])
+async def create_admin_account(admin_data: Dict[str, Any]):
+    """Create a new admin account (existing admin only)"""
+    pool = await get_connection()
+    
+    async with pool.acquire() as conn:
+        cursor = await conn.cursor()
+        
+        # Check if admin already exists
+        await cursor.execute("SELECT id FROM users WHERE email = %s", (admin_data.get("email"),))
+        existing_admin = await cursor.fetchone()
+        
+        if existing_admin:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Admin account with this email already exists"
+            )
+        
+        # Hash password
+        password_hash = hash_password(admin_data.get("password"))
+        
+        # Create new admin
+        await cursor.execute("""
+        INSERT INTO users (email, password_hash, role, first_name, last_name, is_active, created_at)
+        VALUES (%s, %s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP)
+        """, (
+            admin_data.get("email"),
+            password_hash,
+            "admin",
+            admin_data.get("first_name"),
+            admin_data.get("last_name")
+        ))
+        
+        admin_id = cursor.lastrowid
+        
+        print(f"🔧 New admin account created: {admin_data.get('email')}")
+        
+        return {
+            "success": True,
+            "message": "Admin account created successfully",
+            "admin_id": admin_id,
+            "email": admin_data.get("email"),
+            "role": "admin"
+        }
+
 @app.get("/api/admin/users", response_model=Dict[str, Any])
 async def get_all_users():
     """Get all users (admin only)"""
@@ -889,7 +1008,7 @@ async def verify_doctor(doctor_id: int, verification_data: Dict[str, Any]):
         cursor = await conn.cursor()
         
         # Check if doctor exists
-        await cursor.execute("SELECT id, email FROM users WHERE id = %s AND role = 'doctor'", (doctor_id,))
+        await cursor.execute("SELECT id, email, first_name, last_name FROM users WHERE id = %s AND role = 'doctor'", (doctor_id,))
         doctor = await cursor.fetchone()
         
         if not doctor:
@@ -919,6 +1038,23 @@ async def verify_doctor(doctor_id: int, verification_data: Dict[str, Any]):
             admin_notes
         ))
         
+        # If verified, activate the user account
+        if is_verified:
+            await cursor.execute("UPDATE users SET is_active = TRUE WHERE id = %s", (doctor_id,))
+            print(f"✅ Activated doctor account: {doctor[1]}")
+            
+            # Send approval email
+            doctor_name = f"{doctor[2]} {doctor[3]}"
+            doctor_email = doctor[1]
+            
+            subject, text_content, html_content = email_service.get_doctor_approval_template(doctor_name, doctor_email)
+            email_sent = await email_service.send_email(doctor_email, subject, html_content, text_content)
+            
+            if email_sent:
+                print(f"✅ Approval email sent to: {doctor_email}")
+            else:
+                print(f"❌ Failed to send approval email to: {doctor_email}")
+        
         action = "verified" if is_verified else "rejected"
         print(f"🔍 Admin {action} doctor: {doctor[1]} (ID: {doctor_id})")
         
@@ -926,7 +1062,8 @@ async def verify_doctor(doctor_id: int, verification_data: Dict[str, Any]):
             "success": True,
             "message": f"Doctor {action} successfully",
             "doctor_id": doctor_id,
-            "is_verified": is_verified
+            "is_verified": is_verified,
+            "email_sent": is_verified  # Only true if verified and email was sent
         }
 
 @app.post("/api/admin/users/{user_id}/toggle-status", response_model=Dict[str, Any])
@@ -969,47 +1106,63 @@ async def toggle_user_status(user_id: int):
 @app.get("/api/admin/stats", response_model=Dict[str, Any])
 async def get_admin_stats():
     """Get system statistics for admin dashboard"""
-    pool = await get_connection()
-    
-    async with pool.acquire() as conn:
-        cursor = await conn.cursor()
+    try:
+        pool = await get_connection()
         
-        # Get user counts
-        await cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'patient'")
-        patient_count = (await cursor.fetchone())[0]
-        
-        await cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'doctor'")
-        doctor_count = (await cursor.fetchone())[0]
-        
-        await cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
-        admin_count = (await cursor.fetchone())[0]
-        
-        # Get verified doctors count
-        await cursor.execute("""
-        SELECT COUNT(*) FROM doctors d 
-        JOIN users u ON d.user_id = u.id 
-        WHERE u.role = 'doctor' AND d.is_verified = TRUE
-        """)
-        verified_doctors = (await cursor.fetchone())[0]
-        
-        # Get pending cases
-        await cursor.execute("SELECT COUNT(*) FROM medical_cases WHERE status = 'pending_review'")
-        pending_cases = (await cursor.fetchone())[0]
-        
-        # Get total cases
-        await cursor.execute("SELECT COUNT(*) FROM medical_cases")
-        total_cases = (await cursor.fetchone())[0]
-        
+        async with pool.acquire() as conn:
+            cursor = await conn.cursor()
+            
+            # Get user counts
+            await cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'patient'")
+            patient_count = (await cursor.fetchone())[0]
+            
+            await cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'doctor'")
+            doctor_count = (await cursor.fetchone())[0]
+            
+            await cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
+            admin_count = (await cursor.fetchone())[0]
+            
+            # Get verified doctors count
+            await cursor.execute("""
+            SELECT COUNT(*) FROM doctors d 
+            JOIN users u ON d.user_id = u.id 
+            WHERE u.role = 'doctor' AND d.is_verified = TRUE
+            """)
+            verified_doctors = (await cursor.fetchone())[0]
+            
+            # Get pending cases
+            await cursor.execute("SELECT COUNT(*) FROM medical_cases WHERE status = 'pending_review'")
+            pending_cases = (await cursor.fetchone())[0]
+            
+            # Get total cases
+            await cursor.execute("SELECT COUNT(*) FROM medical_cases")
+            total_cases = (await cursor.fetchone())[0]
+            
+            return {
+                "success": True,
+                "stats": {
+                    "total_patients": patient_count,
+                    "total_doctors": doctor_count,
+                    "verified_doctors": verified_doctors,
+                    "pending_doctors": doctor_count - verified_doctors,
+                    "total_admins": admin_count,
+                    "pending_cases": pending_cases,
+                    "total_cases": total_cases
+                }
+            }
+    except Exception as e:
+        print(f"❌ Error in admin stats: {e}")
         return {
-            "success": True,
+            "success": False,
+            "error": str(e),
             "stats": {
-                "total_patients": patient_count,
-                "total_doctors": doctor_count,
-                "verified_doctors": verified_doctors,
-                "pending_doctors": doctor_count - verified_doctors,
-                "total_admins": admin_count,
-                "pending_cases": pending_cases,
-                "total_cases": total_cases
+                "total_patients": 0,
+                "total_doctors": 0,
+                "verified_doctors": 0,
+                "pending_doctors": 0,
+                "total_admins": 0,
+                "pending_cases": 0,
+                "total_cases": 0
             }
         }
 
