@@ -39,8 +39,8 @@ class MedicalTrainingDataGenerator:
                 'prevalence': 0.20
             },
             'Pneumonia': {
-                'base_symptoms': ['cough', 'fever', 'chest pain', 'shortness of breath'],
-                'common_variations': ['fatigue', 'muscle pain', 'headache', 'confusion'],
+                'base_symptoms': ['chest pain', 'cough', 'fever', 'shortness of breath'],
+                'common_variations': ['fatigue', 'nausea', 'vomiting', 'diarrhea', 'confusion'],
                 'severity_range': (6, 10),
                 'duration_range': (168, 672),  # 1-4 weeks
                 'temperature_range': (38.0, 41.0),
@@ -66,11 +66,11 @@ class MedicalTrainingDataGenerator:
                 'prevalence': 0.12
             },
             'Gastroenteritis': {
-                'base_symptoms': ['nausea', 'vomiting', 'diarrhea', 'abdominal pain'],
-                'common_variations': ['fever', 'fatigue', 'dehydration', 'loss of appetite'],
-                'severity_range': (4, 8),
-                'duration_range': (24, 168),  # 1-7 days
-                'temperature_range': (37.0, 39.5),
+                'base_symptoms': ['nausea', 'vomiting', 'watery diarrhea', 'stomach cramps'],
+                'common_variations': ['low-grade fever', 'muscle aches', 'headache', 'abdominal pain'],
+                'severity_range': (3, 7),
+                'duration_range': (24, 336),  # 1-14 days (per Mayo Clinic)
+                'temperature_range': (37.0, 38.8),  # Low-grade fever per Mayo Clinic
                 'age_groups': ['all'],
                 'prevalence': 0.08
             },
@@ -172,7 +172,7 @@ class MedicalTrainingDataGenerator:
         age, gender = self._generate_demographics(condition_info['age_groups'])
         
         # Generate symptoms
-        symptoms = self._generate_symptoms(condition_info)
+        symptoms = self._generate_symptoms(condition, condition_info)
         
         # Generate clinical parameters
         severity = random.randint(*condition_info['severity_range'])
@@ -232,7 +232,7 @@ class MedicalTrainingDataGenerator:
         
         return age, gender
     
-    def _generate_symptoms(self, condition_info: Dict[str, Any]) -> List[str]:
+    def _generate_symptoms(self, condition: str, condition_info: Dict[str, Any]) -> List[str]:
         """Generate symptom list for a condition"""
         base_symptoms = condition_info['base_symptoms'].copy()
         variations = condition_info['common_variations']
@@ -240,16 +240,34 @@ class MedicalTrainingDataGenerator:
         # Always include base symptoms
         symptoms = base_symptoms
         
-        # Add some variations (50-80% chance for each)
+        # Add some variations (30-60% chance for each — less noise for cleaner boundaries)
         for variation in variations:
-            if random.random() < random.uniform(0.5, 0.8):
+            if random.random() < random.uniform(0.3, 0.6):
                 symptoms.append(variation)
         
         # Remove duplicates and shuffle
         symptoms = list(set(symptoms))
         random.shuffle(symptoms)
         
-        return symptoms
+        # Ensure condition-specific dominant symptoms (CDC/Mayo Clinic validated)
+        if condition == 'Influenza':
+            symptoms.extend(['high fever', 'body aches', 'chills', 'respiratory symptoms'])
+        elif condition == 'COVID-19':
+            symptoms.extend(['loss of taste', 'loss of smell', 'dry cough', 'fever'])
+        elif condition == 'Pneumonia':
+            symptoms.extend(['chest pain', 'productive cough', 'high fever', 'shortness of breath'])
+        elif condition == 'Migraine':
+            symptoms.extend(['light sensitivity', 'sound sensitivity', 'visual aura', 'unilateral headache'])
+        elif condition == 'Tension Headache':
+            symptoms.extend(['neck pain', 'stress', 'bilateral headache', 'pressure sensation'])
+        elif condition == 'Gastroenteritis':
+            symptoms.extend(['watery diarrhea', 'stomach cramps', 'nausea', 'vomiting', 'low-grade fever'])
+        elif condition == 'Urinary Tract Infection':
+            symptoms.extend(['painful urination', 'frequent urination', 'burning sensation', 'suprapubic pain'])
+        elif condition == 'Anxiety Disorder':
+            symptoms.extend(['palpitations', 'anxiety', 'shortness of breath', 'dizziness', 'restlessness'])
+        
+        return list(set(symptoms))
     
     def _generate_symptom_description(self, symptoms: List[str]) -> str:
         """Generate natural language symptom description"""

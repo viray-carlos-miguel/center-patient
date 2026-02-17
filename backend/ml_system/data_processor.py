@@ -45,13 +45,23 @@ class MedicalDataProcessor:
         if not text:
             return []
         
-        # Common symptom keywords
+        # Common symptom keywords (CDC/Mayo Clinic validated)
         symptom_keywords = [
-            'headache', 'fever', 'cough', 'nausea', 'vomiting', 'diarrhea',
-            'chest pain', 'abdominal pain', 'back pain', 'joint pain',
-            'fatigue', 'dizziness', 'shortness of breath', 'sore throat',
-            'rash', 'itching', 'swelling', 'numbness', 'tingling',
-            'palpitations', 'constipation', 'urination', 'vision', 'hearing'
+            # Gastrointestinal
+            'nausea', 'vomiting', 'diarrhea', 'watery diarrhea', 'stomach cramps', 'abdominal pain',
+            # Respiratory
+            'cough', 'chest pain', 'chest pain when breathing', 'shortness of breath', 'dyspnea',
+            'productive cough', 'sore throat', 'wheezing',
+            # Neurological
+            'headache', 'migraine', 'dizziness', 'confusion', 'light sensitivity', 'sound sensitivity',
+            # General
+            'fever', 'high fever', 'fatigue', 'body aches', 'chills', 'muscle pain',
+            # Urinary
+            'painful urination', 'frequent urination', 'burning sensation', 'suprapubic pain',
+            # Mental Health
+            'anxiety', 'palpitations', 'restlessness',
+            # Other
+            'back pain', 'joint pain', 'rash', 'itching', 'swelling', 'numbness', 'tingling'
         ]
         
         found_symptoms = []

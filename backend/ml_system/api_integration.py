@@ -11,9 +11,6 @@ from datetime import datetime
 
 from .prediction_engine import MedicalPredictionEngine
 from .training_data import MedicalTrainingDataGenerator
-from .advanced_training import AdvancedMLTrainingSystem
-from .imaging_analyzer import MedicalImagingAnalyzer
-from .continuous_learner import ContinuousLearningSystem
 
 # Create router
 ml_router = APIRouter(prefix="/api/ml", tags=["machine-learning"])
@@ -21,9 +18,6 @@ ml_router = APIRouter(prefix="/api/ml", tags=["machine-learning"])
 # Initialize ML components
 prediction_engine = MedicalPredictionEngine()
 data_generator = MedicalTrainingDataGenerator()
-advanced_system = AdvancedMLTrainingSystem()
-imaging_analyzer = MedicalImagingAnalyzer()
-continuous_learner = ContinuousLearningSystem()
 
 # Pydantic models
 class SymptomInput(BaseModel):
@@ -103,7 +97,7 @@ async def predict_disease(request: PredictionRequest):
                 "requires_medical_review": result.get("metadata", {}).get("requires_medical_review", True),
                 "advanced_features": {
                     "imaging_analysis": request.include_imaging,
-                    "continuous_learning": continuous_learner.is_initialized
+                    "continuous_learning": False
                 }
             }
         }
@@ -271,26 +265,16 @@ async def upload_and_analyze_image(
             detail=f"Image upload and analysis failed: {str(e)}"
         )
 
-@ml_router.post("/feedback/submit", response_model=Dict[str, Any])
+@ml_router.post("/feedback", response_model=Dict[str, Any])
 async def submit_feedback(feedback: FeedbackData):
     """
     Submit feedback for continuous learning
     """
     try:
-        if not continuous_learner.is_initialized:
-            return {
-                "success": False,
-                "error": "Continuous learning system not initialized"
-            }
-        
-        # Collect feedback
-        result = await continuous_learner.collect_feedback(feedback.dict())
-        
+        # Continuous learning not available
         return {
-            "success": True,
-            "feedback_id": result.get('feedback_id'),
-            "timestamp": result.get('timestamp'),
-            "message": "Feedback submitted successfully"
+            "success": False,
+            "error": "Continuous learning system not initialized"
         }
         
     except Exception as e:

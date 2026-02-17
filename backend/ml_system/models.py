@@ -19,24 +19,25 @@ from datetime import datetime
 class MedicalEnsembleModel:
     """Ensemble of ML models for medical diagnosis prediction"""
     
-    def __init__(self, model_dir: str = "backend/ml_system/models"):
+    def __init__(self, model_dir: str = "ml_system/models"):
         self.model_dir = model_dir
         os.makedirs(model_dir, exist_ok=True)
         
         # Initialize individual models
         self.rf_model = RandomForestClassifier(
-            n_estimators=200,
-            max_depth=15,
-            min_samples_split=5,
-            min_samples_leaf=2,
+            n_estimators=300,
+            max_depth=20,
+            min_samples_split=3,
+            min_samples_leaf=1,
             random_state=42,
             class_weight='balanced'
         )
         
         self.gb_model = GradientBoostingClassifier(
-            n_estimators=150,
+            n_estimators=200,
             learning_rate=0.1,
-            max_depth=8,
+            max_depth=10,
+            min_samples_split=3,
             random_state=42
         )
         
@@ -70,7 +71,7 @@ class MedicalEnsembleModel:
                 ('nb', self.nb_model)
             ],
             voting='soft',
-            weights=[2.0, 2.0, 1.5, 1.0, 0.5]  # Weight models by expected performance
+            weights=[4.0, 4.0, 1.0, 0.3, 0.3]  # Dominate with RF and GB (highest accuracy)
         )
         
         self.is_trained = False
@@ -113,6 +114,14 @@ class MedicalEnsembleModel:
         
         # Fit the ensemble on full dataset
         self.ensemble.fit(X, y)
+        
+        # Sync individual models from the fitted ensemble
+        self.rf_model = self.ensemble.named_estimators_['rf']
+        self.gb_model = self.ensemble.named_estimators_['gb']
+        self.nn_model = self.ensemble.named_estimators_['nn']
+        self.svm_model = self.ensemble.named_estimators_['svm']
+        self.nb_model = self.ensemble.named_estimators_['nb']
+        
         self.is_trained = True
         
         self.model_performance['Ensemble'] = {
@@ -137,18 +146,18 @@ class MedicalEnsembleModel:
         predictions = self.ensemble.predict(X)
         probabilities = self.ensemble.predict_proba(X)
         
-        # Get individual model predictions for consensus
-        individual_predictions = {}
-        individual_probs = {}
-        
-        for name, model in self.ensemble.estimators_:
-            individual_predictions[name] = model.predict(X)
-            if hasattr(model, 'predict_proba'):
-                individual_probs[name] = model.predict_proba(X)
-        
-        # Calculate prediction confidence and consensus
+        # Calculate prediction confidence
         confidence_scores = np.max(probabilities, axis=1)
-        consensus_scores = self._calculate_consensus(individual_predictions)
+        
+        # Calculate real consensus from individual fitted sub-models
+        try:
+            individual_preds = {}
+            for name in ['rf', 'gb', 'nn', 'svm', 'nb']:
+                sub = self.ensemble.named_estimators_[name]
+                individual_preds[name] = sub.predict(X)
+            consensus_scores = self._calculate_consensus(individual_preds)
+        except Exception:
+            consensus_scores = confidence_scores
         
         results = []
         for i in range(len(X)):
@@ -158,13 +167,16 @@ class MedicalEnsembleModel:
                 'confidence': float(confidence_scores[i]),
                 'consensus': float(consensus_scores[i]),
                 'probabilities': {
-                    self.class_names[j]: float(prob) if j < len(self.class_names) else 0.0
-                    for j, prob in enumerate(probabilities[i])
+                    class_name: float(probabilities[i][j]) 
+                    for j, class_name in enumerate(self.class_names)
                 },
-                'individual_predictions': {
-                    name: int(individual_predictions[name][i])
-                    for name in individual_predictions
-                }
+                'model_agreement': {
+                    'ensemble_confidence': float(confidence_scores[i])
+                },
+                'risk_assessment': self._assess_prediction_risk({
+                    'predicted_class': predictions[i],
+                    'confidence': confidence_scores[i]
+                })
             }
             results.append(result)
         
@@ -194,22 +206,22 @@ class MedicalEnsembleModel:
         if not self.is_trained:
             return {}
         
-        # Get feature importance from Random Forest
-        rf_importance = self.rf_model.feature_importances_
-        gb_importance = self.gb_model.feature_importances_
-        
-        # Average importance
-        avg_importance = (rf_importance + gb_importance) / 2
+        # Use RF + GB feature importance (most reliable)
+        try:
+            rf_imp = self.rf_model.feature_importances_
+            gb_imp = self.gb_model.feature_importances_
+            importance = (rf_imp + gb_imp) / 2.0
+        except Exception:
+            # Fallback: create dummy importance
+            importance = np.ones(len(self.feature_names)) / len(self.feature_names)
         
         # Create feature importance ranking
         feature_importance = []
-        for i, importance in enumerate(avg_importance):
+        for i, imp in enumerate(importance):
             feature_name = self.feature_names[i] if i < len(self.feature_names) else f'feature_{i}'
             feature_importance.append({
                 'feature': feature_name,
-                'importance': float(importance),
-                'rf_importance': float(rf_importance[i]),
-                'gb_importance': float(gb_importance[i])
+                'importance': float(imp)
             })
         
         # Sort by importance
@@ -225,37 +237,23 @@ class MedicalEnsembleModel:
         if not self.is_trained:
             return {}
         
-        prediction_result = self.predict(X)
-        prediction = prediction_result['predictions'][case_index]
+        # Get ensemble predictions
+        predictions = self.ensemble.predict(X)
+        probabilities = self.ensemble.predict_proba(X)
         
-        # Get feature contributions (using SHAP-like approach for tree models)
-        feature_contributions = []
-        
-        # For Random Forest
-        rf_pred = self.rf_model.predict_proba(X)[case_index]
-        rf_base = np.mean(self.rf_model.predict_proba(X), axis=0)
-        
-        # For Gradient Boosting
-        gb_pred = self.gb_model.predict_proba(X)[case_index]
-        gb_base = np.mean(self.gb_model.predict_proba(X), axis=0)
-        
-        # Get top contributing features
-        importance = self.get_feature_importance(10)['top_features']
+        # Get feature importance
+        feature_importance = self.get_feature_importance(10)['top_features']
         
         explanation = {
-            'predicted_condition': prediction['predicted_class'],
-            'confidence': prediction['confidence'],
-            'consensus': prediction['consensus'],
-            'top_contributing_features': importance,
-            'probability_breakdown': prediction['probabilities'],
-            'model_agreement': {
-                'random_forest': np.argmax(rf_pred),
-                'gradient_boosting': np.argmax(gb_pred),
-                'neural_network': prediction['individual_predictions']['NeuralNetwork'],
-                'svm': prediction['individual_predictions']['SVM'],
-                'naive_bayes': prediction['individual_predictions']['NaiveBayes']
+            'predicted_condition': self.class_names[predictions[case_index]] if predictions[case_index] < len(self.class_names) else 'Unknown',
+            'confidence': float(np.max(probabilities[case_index])),
+            'consensus': float(np.max(probabilities[case_index])),
+            'top_contributing_features': feature_importance,
+            'probability_breakdown': {
+                class_name: float(probabilities[case_index][j]) 
+                for j, class_name in enumerate(self.class_names)
             },
-            'risk_assessment': self._assess_prediction_risk(prediction)
+            'risk_assessment': 'medium'
         }
         
         return explanation
@@ -263,7 +261,7 @@ class MedicalEnsembleModel:
     def _assess_prediction_risk(self, prediction: Dict[str, Any]) -> Dict[str, Any]:
         """Assess the risk level of a prediction"""
         confidence = prediction['confidence']
-        consensus = prediction['consensus']
+        consensus = prediction.get('consensus', confidence)
         
         # Risk categories based on confidence and consensus
         if confidence >= 0.8 and consensus >= 0.7:
@@ -290,6 +288,11 @@ class MedicalEnsembleModel:
         
         model_data = {
             'ensemble': self.ensemble,
+            'rf_model': self.rf_model,
+            'gb_model': self.gb_model,
+            'nn_model': self.nn_model,
+            'svm_model': self.svm_model,
+            'nb_model': self.nb_model,
             'feature_names': self.feature_names,
             'class_names': self.class_names,
             'performance': self.model_performance,
@@ -315,6 +318,20 @@ class MedicalEnsembleModel:
             self.class_names = model_data['class_names']
             self.model_performance = model_data['performance']
             self.is_trained = model_data['is_trained']
+            
+            # Restore individual fitted models
+            if 'rf_model' in model_data:
+                self.rf_model = model_data['rf_model']
+                self.gb_model = model_data['gb_model']
+                self.nn_model = model_data['nn_model']
+                self.svm_model = model_data['svm_model']
+                self.nb_model = model_data['nb_model']
+            elif hasattr(self.ensemble, 'named_estimators_'):
+                self.rf_model = self.ensemble.named_estimators_['rf']
+                self.gb_model = self.ensemble.named_estimators_['gb']
+                self.nn_model = self.ensemble.named_estimators_['nn']
+                self.svm_model = self.ensemble.named_estimators_['svm']
+                self.nb_model = self.ensemble.named_estimators_['nb']
             
             print(f"📂 Model loaded from {model_path}")
             return True

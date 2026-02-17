@@ -16,6 +16,8 @@ import hashlib
 # Import email service
 from email_service import email_service
 
+# ML analysis only; Gemini disabled
+
 load_dotenv()
 
 # AI System Removed - Using ML and Rule-based Only
@@ -43,22 +45,17 @@ class SimplePredictor:
         }
 predictor = SimplePredictor()
 
-# Import ML Prediction System - Temporarily disabled for performance
-# try:
-#     from ml_system.prediction_engine import MedicalPredictionEngine
-#     from ml_system.api_integration import ml_router
-#     ml_engine = MedicalPredictionEngine()
-#     ML_ENABLED = True
-#     print("✅ ML Prediction System initialized successfully")
-# except Exception as e:
-#     print(f"⚠️ ML System disabled due to compatibility issue: {e}")
-#     ML_ENABLED = False
-#     ml_engine = None
-
-# Temporarily disable ML system for performance
-ML_ENABLED = False
-ml_engine = None
-print("⚠️ ML System temporarily disabled for performance")
+# Import ML Prediction System
+try:
+    from ml_system.prediction_engine import MedicalPredictionEngine
+    from simple_ml_api import ml_router
+    ml_engine = MedicalPredictionEngine()
+    ML_ENABLED = True
+    print("✅ ML Prediction System initialized successfully")
+except Exception as e:
+    print(f"⚠️ ML System disabled due to compatibility issue: {e}")
+    ML_ENABLED = False
+    ml_engine = None
 
 # MySQL Database Configuration
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
@@ -828,30 +825,102 @@ async def review_case(case_id: int, review_data: Dict[str, Any]):
 # Submit symptoms
 @app.post("/api/cases/submit", response_model=Dict[str, Any])
 async def submit_symptoms(symptom_data: Dict[str, Any]):
-    """Submit new symptom case"""
+    """Submit new symptom case with ML analysis"""
     pool = await get_connection()
     
     async with pool.acquire() as conn:
         cursor = await conn.cursor()
         
-        # Insert new case
+        # Perform ML analysis using the trained ML engine
+        ml_input = symptom_data.get("symptoms", {})
+        patient_info = symptom_data.get("patient_info")
+
+        # Allow either a dict payload or a simple list of symptoms
+        if isinstance(ml_input, list):
+            # Convert list of symptoms into a basic description string
+            ml_input = {
+                "description": ", ".join([str(s) for s in ml_input])
+            }
+
+        if ML_ENABLED and ml_engine:
+            try:
+                ai_assessment = await ml_engine.predict_disease(ml_input, patient_info)
+            except Exception as e:
+                print(f"⚠️ ML prediction failed, falling back to simple assessment: {e}")
+                ai_assessment = {
+                    "ml_prediction": {
+                        "primary_condition": "General Medical Assessment",
+                        "confidence": 0.5,
+                        "consensus": 0.5,
+                        "probability_breakdown": {"General Medical Assessment": 1.0}
+                    },
+                    "metadata": {"prediction_method": "fallback_rule_based"}
+                }
+        else:
+            # Final fallback if ML is not enabled
+            ai_assessment = {
+                "ml_prediction": {
+                    "primary_condition": "General Medical Assessment",
+                    "confidence": 0.5,
+                    "consensus": 0.5,
+                    "probability_breakdown": {"General Medical Assessment": 1.0}
+                },
+                "metadata": {"prediction_method": "fallback_rule_based"}
+            }
+        
+        # Get or create demo patient
+        await cursor.execute("SELECT id FROM users WHERE email = %s", ("demo.patient@gmail.com",))
+        patient = await cursor.fetchone()
+        
+        if not patient:
+            # Create demo patient
+            password_hash = hashlib.sha256("Demo@123".encode()).hexdigest()
+            await cursor.execute("""
+            INSERT INTO users (email, password_hash, role, first_name, last_name, is_active)
+            VALUES (%s, %s, %s, %s, %s, TRUE)
+            """, (
+                "demo.patient@gmail.com",
+                password_hash,
+                "patient",
+                "Demo",
+                "Patient"
+            ))
+            patient_id = cursor.lastrowid
+            
+            # Create patient profile
+            await cursor.execute("""
+            INSERT INTO patients (user_id, date_of_birth)
+            VALUES (%s, %s)
+            """, (patient_id, "1990-01-01"))
+        else:
+            patient_id = patient[0]
+        
+        # Insert new case with AI assessment
         await cursor.execute("""
-        INSERT INTO medical_cases (title, symptoms, ai_assessment, status)
-        VALUES (%s, %s, %s, 'pending_review')
+        INSERT INTO medical_cases (patient_id, doctor_id, symptoms, ai_assessment, status)
+        VALUES (%s, %s, %s, %s, 'pending_review')
         """, (
-            symptom_data.get("title", "New Symptom Case"),
+            patient_id,
+            None,  # No doctor assigned yet
             json.dumps(symptom_data.get("symptoms", {})),
-            json.dumps(symptom_data.get("ai_assessment", {}))
+            json.dumps(ai_assessment),
         ))
         
         case_id = cursor.lastrowid
         
         await cursor.close()
         
+        # Extract confidence (prefer consensus if present)
+        ml_pred = ai_assessment.get("ml_prediction", {}) if isinstance(ai_assessment, dict) else {}
+        consensus = ml_pred.get("consensus")
+        confidence_val = consensus if isinstance(consensus, (int, float)) else ml_pred.get("confidence", 0.75)
+
         return {
             "success": True,
             "case_id": case_id,
-            "message": "Symptoms submitted successfully"
+            "message": "Symptoms submitted successfully",
+            "ai_analysis": ai_assessment,
+            "confidence": float(confidence_val) * 100.0
         }
 
 # ===== ADMIN MANAGEMENT ENDPOINTS =====
