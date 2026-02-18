@@ -17,7 +17,7 @@ class MedicalDataProcessor:
     def __init__(self):
         self.symptom_encoder = LabelEncoder()
         self.severity_scaler = StandardScaler()
-        self.tfidf_vectorizer = TfidfVectorizer(max_features=100, stop_words='english')
+        self.tfidf_vectorizer = TfidfVectorizer(max_features=150, stop_words='english')
         self.age_scaler = StandardScaler()
         self.is_fitted = False
         
@@ -45,23 +45,35 @@ class MedicalDataProcessor:
         if not text:
             return []
         
-        # Common symptom keywords (CDC/Mayo Clinic validated)
+        # Enhanced symptom keywords with condition-specific identifiers
         symptom_keywords = [
-            # Gastrointestinal
-            'nausea', 'vomiting', 'diarrhea', 'watery diarrhea', 'stomach cramps', 'abdominal pain',
-            # Respiratory
-            'cough', 'chest pain', 'chest pain when breathing', 'shortness of breath', 'dyspnea',
-            'productive cough', 'sore throat', 'wheezing',
-            # Neurological
-            'headache', 'migraine', 'dizziness', 'confusion', 'light sensitivity', 'sound sensitivity',
-            # General
-            'fever', 'high fever', 'fatigue', 'body aches', 'chills', 'muscle pain',
-            # Urinary
-            'painful urination', 'frequent urination', 'burning sensation', 'suprapubic pain',
-            # Mental Health
-            'anxiety', 'palpitations', 'restlessness',
-            # Other
-            'back pain', 'joint pain', 'rash', 'itching', 'swelling', 'numbness', 'tingling'
+            # COVID-19 specific
+            'covid-19', 'covid', 'coronavirus', 'sars-cov-2', 'loss of taste', 'loss of smell', 
+            'anosmia', 'ageusia', 'taste loss', 'smell loss',
+            # Influenza specific
+            'influenza', 'flu', 'seasonal flu', 'body aches', 'muscle pain', 'chills', 'malaise',
+            # Pneumonia specific
+            'pneumonia', 'lung infection', 'chest infection', 'productive cough', 'crackles', 
+            'consolidation', 'dyspnea',
+            # Gastroenteritis specific
+            'gastroenteritis', 'stomach flu', 'gi infection', 'vomiting', 'diarrhea', 
+            'watery diarrhea', 'stomach cramps', 'dehydration',
+            # Migraine specific
+            'migraine', 'migraine headache', 'unilateral headache', 'throbbing pain', 
+            'photophobia', 'phonophobia', 'aura', 'light sensitivity', 'sound sensitivity',
+            # Tension Headache specific
+            'tension headache', 'stress headache', 'bilateral headache', 'pressure sensation',
+            'band-like', 'neck pain', 'scalp tenderness',
+            # UTI specific
+            'uti', 'urinary tract infection', 'urinary infection', 'dysuria', 'painful urination',
+            'burning urination', 'frequency', 'urgency', 'suprapubic pain', 'hematuria',
+            # Anxiety specific
+            'anxiety', 'anxiety disorder', 'panic attack', 'palpitations', 'heart racing',
+            'nervousness', 'restlessness', 'trembling',
+            # General symptoms
+            'fever', 'high fever', 'cough', 'dry cough', 'chest pain', 'shortness of breath',
+            'abdominal pain', 'nausea', 'headache', 'fatigue', 'sore throat', 'wheezing',
+            'joint pain', 'back pain', 'rash', 'itching', 'swelling', 'dizziness', 'confusion'
         ]
         
         found_symptoms = []
@@ -109,7 +121,7 @@ class MedicalDataProcessor:
     def extract_temporal_features(self, duration_hours: float) -> Dict[str, float]:
         """Extract temporal features from symptom duration"""
         if duration_hours is None:
-            return {'duration_days': 0, 'is_acute': 1, 'is_chronic': 0}
+            return {'duration_days': 0, 'is_acute': 1, 'is_chronic': 0, 'is_subacute': 0}
         
         duration_days = duration_hours / 24.0
         is_acute = 1.0 if duration_days <= 7 else 0.0
@@ -141,7 +153,7 @@ class MedicalDataProcessor:
     def create_symptom_vector(self, symptoms: List[str], description: str = None) -> np.ndarray:
         """Create numerical vector from symptoms"""
         if not symptoms and not description:
-            return np.zeros(50)  # Default vector size
+            return np.zeros(100)  # Default vector size
         
         # Combine symptoms and description
         symptom_text = ' '.join(symptoms)
@@ -153,8 +165,8 @@ class MedicalDataProcessor:
             if self.is_fitted:
                 vector = self.tfidf_vectorizer.transform([symptom_text]).toarray()[0]
             else:
-                # For training, we'll fit later
-                vector = np.zeros(100)  # Placeholder
+                # For training, we'll fit later - but ensure consistent size
+                vector = np.zeros(100)  # Placeholder matching vectorizer max_features
         except:
             vector = np.zeros(100)
         
@@ -193,47 +205,86 @@ class MedicalDataProcessor:
             **demographics
         }
         
+        # Calculate medical similarity features
+        medical_similarity = self.calculate_medical_similarity(all_symptoms)
+        
+        # Combine all features
+        all_features = {**features, **medical_similarity}
+        
         # Convert to arrays
-        feature_array = np.array(list(features.values()))
+        feature_array = np.array(list(all_features.values()))
         symptom_array = symptom_vector
         
         return {
             'features': feature_array,
             'symptom_vector': symptom_array,
             'symptoms': all_symptoms,
-            'raw_features': features
+            'raw_features': features,
+            'medical_similarity': medical_similarity
         }
     
     def prepare_training_data(self, cases: List[Dict[str, Any]]) -> Tuple[np.ndarray, np.ndarray, List[str]]:
         """Prepare batch of cases for ML training"""
         processed_cases = []
         labels = []
+        symptom_texts = []
         
+        # First pass: collect all symptom texts and process basic features
         for case in cases:
             processed = self.process_single_case(case['symptoms'])
             
-            # Combine features and symptom vector
-            combined_features = np.concatenate([
-                processed['features'],
-                processed['symptom_vector']
-            ])
+            # Store symptom text for TF-IDF fitting
+            text_symptoms = self.extract_symptoms_from_text(case['symptoms'].get('description', ''))
+            checkbox_symptoms = [k.replace('has_', '').replace('_', ' ') 
+                                for k, v in case['symptoms'].items() 
+                                if k.startswith('has_') and v]
+            all_symptoms = list(set(text_symptoms + checkbox_symptoms + case['symptoms'].get('symptoms', [])))
+            symptom_text = ' '.join(all_symptoms) + ' ' + case['symptoms'].get('description', '')
+            symptom_texts.append(symptom_text)
             
-            processed_cases.append(combined_features)
+            # Store basic features (without symptom vector for now)
+            processed_cases.append(processed['features'])
             labels.append(case['diagnosis'])
         
-        X = np.array(processed_cases)
-        y = np.array(labels)
-        
-        # Fit label encoder if not already fitted
+        # Fit TF-IDF vectorizer on all symptom texts
         if not self.is_fitted:
-            self.symptom_encoder.fit(y)
-            y_encoded = self.symptom_encoder.transform(y)
+            self.tfidf_vectorizer.fit(symptom_texts)
+            self.symptom_encoder.fit(labels)
             self.is_fitted = True
-        else:
-            y_encoded = self.symptom_encoder.transform(y)
+        
+        # Create symptom vectors with fitted vectorizer
+        symptom_vectors = self.tfidf_vectorizer.transform(symptom_texts).toarray()
+        
+        # Combine basic features with symptom vectors
+        X = np.hstack([np.array(processed_cases), symptom_vectors])
+        y = np.array(labels)
+        y_encoded = self.symptom_encoder.transform(y)
         
         return X, y_encoded, labels
     
+    def calculate_medical_similarity(self, symptoms: List[str]) -> Dict[str, float]:
+        """Calculate medical similarity scores for key conditions"""
+        # Medical condition keyword patterns
+        condition_patterns = {
+            'COVID-19': ['covid', 'coronavirus', 'sars-cov-2', 'loss of taste', 'loss of smell', 'anosmia', 'dry cough', 'shortness of breath', 'fever', 'fatigue'],
+            'Influenza': ['influenza', 'flu', 'sudden onset', 'muscle aches', 'body aches', 'chills', 'high fever', 'malaise', 'headache', 'fatigue'],
+            'Pneumonia': ['pneumonia', 'lung infection', 'productive cough', 'chest pain', 'shortness of breath', 'difficulty breathing', 'fever', 'chills'],
+            'Gastroenteritis': ['gastroenteritis', 'stomach flu', 'diarrhea', 'vomiting', 'nausea', 'watery diarrhea', 'abdominal cramps'],
+            'Migraine': ['migraine', 'unilateral', 'throbbing', 'photophobia', 'phonophobia', 'aura', 'light sensitivity', 'nausea'],
+            'Tension Headache': ['tension headache', 'bilateral', 'pressure', 'band-like', 'stress headache', 'neck pain', 'mild'],
+            'Urinary Tract Infection': ['uti', 'burning urination', 'frequency', 'urgency', 'dysuria', 'pelvic pain', 'cloudy urine'],
+            'Anxiety Disorder': ['anxiety', 'panic attack', 'palpitations', 'heart racing', 'nervousness', 'restlessness', 'fear', 'sweating']
+        }
+        
+        similarity_scores = {}
+        symptom_text = ' '.join(symptoms).lower()
+        
+        for condition, keywords in condition_patterns.items():
+            matches = sum(1 for keyword in keywords if keyword in symptom_text)
+            similarity_scores[f'medical_sim_{condition}'] = matches / len(keywords)
+        
+        return similarity_scores
+
     def get_feature_names(self) -> List[str]:
         """Get names of all features for interpretability"""
         base_features = [
@@ -242,6 +293,19 @@ class MedicalDataProcessor:
             'age_normalized', 'is_male', 'is_female', 'is_other'
         ]
         
-        symptom_features = [f'symptom_tfidf_{i}' for i in range(100)]
+        # Return actual TF-IDF feature count, not theoretical max
+        if self.is_fitted and hasattr(self.tfidf_vectorizer, 'vocabulary_'):
+            actual_tfidf_features = len(self.tfidf_vectorizer.vocabulary_)
+        else:
+            actual_tfidf_features = 150  # Default for unfitted state
         
-        return base_features + symptom_features
+        symptom_features = [f'symptom_tfidf_{i}' for i in range(actual_tfidf_features)]
+        
+        # Add medical similarity features
+        medical_similarity_features = [
+            'medical_sim_COVID-19', 'medical_sim_Influenza', 'medical_sim_Pneumonia',
+            'medical_sim_Gastroenteritis', 'medical_sim_Migraine', 'medical_sim_Tension Headache',
+            'medical_sim_Urinary Tract Infection', 'medical_sim_Anxiety Disorder'
+        ]
+        
+        return base_features + symptom_features + medical_similarity_features

@@ -28,8 +28,8 @@ class MedicalPredictionEngine:
     def _initialize(self):
         """Initialize the prediction engine"""
         try:
-            # Try to load existing model
-            if self.model.load_model():
+            # Try to load existing model (restore data processor state too)
+            if self.model.load_model(data_processor=self.data_processor):
                 self.is_initialized = True
                 print("✅ Medical ML Engine initialized with existing model")
             else:
@@ -60,6 +60,9 @@ class MedicalPredictionEngine:
             # Train the model
             performance = self.model.train(X, y, feature_names, class_names)
             
+            # Re-save with data processor state so TF-IDF persists
+            self.model.save_model(data_processor=self.data_processor)
+            
             self.is_initialized = True
             
             return {
@@ -84,10 +87,10 @@ class MedicalPredictionEngine:
             return self._fallback_prediction(symptoms)
         
         try:
-            # Process the input symptoms
+            # Process the input symptoms with enhanced features
             processed = self.data_processor.process_single_case(symptoms)
             
-            # Combine features
+            # Use the enhanced features directly (includes distinctiveness + TF-IDF)
             X = np.concatenate([processed['features'], processed['symptom_vector']]).reshape(1, -1)
             
             # Make prediction
@@ -104,6 +107,8 @@ class MedicalPredictionEngine:
             
         except Exception as e:
             print(f"❌ Prediction error: {e}")
+            import traceback
+            traceback.print_exc()
             return self._fallback_prediction(symptoms)
     
     async def _enhance_with_knowledge(self, prediction: Dict[str, Any], explanation: Dict[str, Any], 
@@ -186,6 +191,16 @@ class MedicalPredictionEngine:
         symptom_list = symptoms.get('symptoms', [])
         duration = symptoms.get('duration_hours', 0)
         severity = symptoms.get('severity', 5)
+        
+        # Handle string severity
+        if isinstance(severity, str):
+            severity_mapping = {
+                'mild': 1, 'low': 1, 'slight': 1,
+                'moderate': 2, 'medium': 2, 'average': 2,
+                'severe': 3, 'high': 3, 'intense': 3,
+                'very severe': 4, 'extreme': 4, 'critical': 4
+            }
+            severity = severity_mapping.get(severity.lower(), 2) * 2.5  # Convert to 1-10 scale
         
         # Pattern analysis
         patterns = {
@@ -314,7 +329,19 @@ class MedicalPredictionEngine:
         if any(symptom in symptom_list for symptom in high_risk_symptoms):
             return 'high'
         
-        if symptoms.get('severity', 5) >= 8:
+        # Handle both string and numeric severity
+        severity = symptoms.get('severity', 5)
+        if isinstance(severity, str):
+            # Convert string severity to numeric (using the same mapping as data_processor)
+            severity_mapping = {
+                'mild': 1, 'low': 1, 'slight': 1,
+                'moderate': 2, 'medium': 2, 'average': 2,
+                'severe': 3, 'high': 3, 'intense': 3,
+                'very severe': 4, 'extreme': 4, 'critical': 4
+            }
+            severity = severity_mapping.get(severity.lower(), 2) * 2.5  # Convert to 1-10 scale
+        
+        if severity >= 8:
             return 'medium'
         
         return 'low'

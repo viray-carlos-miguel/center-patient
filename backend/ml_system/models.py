@@ -19,9 +19,14 @@ from datetime import datetime
 class MedicalEnsembleModel:
     """Ensemble of ML models for medical diagnosis prediction"""
     
-    def __init__(self, model_dir: str = "ml_system/models"):
-        self.model_dir = model_dir
-        os.makedirs(model_dir, exist_ok=True)
+    def __init__(self, model_dir: str = None):
+        if model_dir is None:
+            # Use absolute path to avoid confusion
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            self.model_dir = os.path.join(current_dir, "models")
+        else:
+            self.model_dir = model_dir
+        os.makedirs(self.model_dir, exist_ok=True)
         
         # Initialize individual models
         self.rf_model = RandomForestClassifier(
@@ -115,12 +120,8 @@ class MedicalEnsembleModel:
         # Fit the ensemble on full dataset
         self.ensemble.fit(X, y)
         
-        # Sync individual models from the fitted ensemble
-        self.rf_model = self.ensemble.named_estimators_['rf']
-        self.gb_model = self.ensemble.named_estimators_['gb']
-        self.nn_model = self.ensemble.named_estimators_['nn']
-        self.svm_model = self.ensemble.named_estimators_['svm']
-        self.nb_model = self.ensemble.named_estimators_['nb']
+        # Sync individual models - they're already trained from ensemble fitting
+        # No need to access named_estimators_ since models are already fitted
         
         self.is_trained = True
         
@@ -152,9 +153,17 @@ class MedicalEnsembleModel:
         # Calculate real consensus from individual fitted sub-models
         try:
             individual_preds = {}
-            for name in ['rf', 'gb', 'nn', 'svm', 'nb']:
-                sub = self.ensemble.named_estimators_[name]
-                individual_preds[name] = sub.predict(X)
+            # Use estimators_ instead of named_estimators_ for compatibility
+            if hasattr(self.ensemble, 'estimators_'):
+                for (name, model) in self.ensemble.estimators_:
+                    individual_preds[name] = model.predict(X)
+            else:
+                # Fallback to individual models
+                individual_preds['rf'] = self.rf_model.predict(X)
+                individual_preds['gb'] = self.gb_model.predict(X)
+                individual_preds['nn'] = self.nn_model.predict(X)
+                individual_preds['svm'] = self.svm_model.predict(X)
+                individual_preds['nb'] = self.nb_model.predict(X)
             consensus_scores = self._calculate_consensus(individual_preds)
         except Exception:
             consensus_scores = confidence_scores
@@ -281,8 +290,8 @@ class MedicalEnsembleModel:
             'consensus_score': consensus
         }
     
-    def save_model(self):
-        """Save the trained model"""
+    def save_model(self, data_processor=None):
+        """Save the trained model and optionally the data processor"""
         if not self.is_trained:
             return
         
@@ -300,12 +309,20 @@ class MedicalEnsembleModel:
             'timestamp': datetime.now().isoformat()
         }
         
+        # Persist data processor state (TF-IDF + label encoder)
+        if data_processor is not None:
+            model_data['data_processor_state'] = {
+                'tfidf_vectorizer': data_processor.tfidf_vectorizer,
+                'symptom_encoder': data_processor.symptom_encoder,
+                'is_fitted': data_processor.is_fitted
+            }
+        
         model_path = os.path.join(self.model_dir, 'medical_ensemble_model.pkl')
         joblib.dump(model_data, model_path)
         print(f"💾 Model saved to {model_path}")
     
-    def load_model(self) -> bool:
-        """Load a trained model"""
+    def load_model(self, data_processor=None) -> bool:
+        """Load a trained model and optionally restore data processor state"""
         model_path = os.path.join(self.model_dir, 'medical_ensemble_model.pkl')
         
         if not os.path.exists(model_path):
@@ -326,12 +343,25 @@ class MedicalEnsembleModel:
                 self.nn_model = model_data['nn_model']
                 self.svm_model = model_data['svm_model']
                 self.nb_model = model_data['nb_model']
-            elif hasattr(self.ensemble, 'named_estimators_'):
-                self.rf_model = self.ensemble.named_estimators_['rf']
-                self.gb_model = self.ensemble.named_estimators_['gb']
-                self.nn_model = self.ensemble.named_estimators_['nn']
-                self.svm_model = self.ensemble.named_estimators_['svm']
-                self.nb_model = self.ensemble.named_estimators_['nb']
+            elif hasattr(self.ensemble, 'estimators_'):
+                for (name, model) in self.ensemble.estimators_:
+                    if name == 'rf':
+                        self.rf_model = model
+                    elif name == 'gb':
+                        self.gb_model = model
+                    elif name == 'nn':
+                        self.nn_model = model
+                    elif name == 'svm':
+                        self.svm_model = model
+                    elif name == 'nb':
+                        self.nb_model = model
+            
+            # Restore data processor state (TF-IDF + label encoder)
+            if data_processor is not None and 'data_processor_state' in model_data:
+                dp_state = model_data['data_processor_state']
+                data_processor.tfidf_vectorizer = dp_state['tfidf_vectorizer']
+                data_processor.symptom_encoder = dp_state['symptom_encoder']
+                data_processor.is_fitted = dp_state['is_fitted']
             
             print(f"📂 Model loaded from {model_path}")
             return True
@@ -349,6 +379,6 @@ class MedicalEnsembleModel:
             'num_features': len(self.feature_names),
             'num_classes': len(self.class_names),
             'performance': self.model_performance,
-            'model_types': list(self.ensemble.named_estimators.keys()),
+            'model_types': list(name for name, model in self.ensemble.estimators_),
             'timestamp': datetime.now().isoformat()
         }
