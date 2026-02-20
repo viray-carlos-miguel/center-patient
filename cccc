@@ -1,7 +1,0 @@
-SECRET_KEY=your-super-secret-key-change-in-production
-ENVIRONMENT=development
-GMAIL_EMAIL=carlosviray2004@gmail.com
-GMAIL_APP_PASSWORD=nyrrbgeszvzobsue
-GEMINI_API_KEY=AIzaSyBHbOlNRFKEClCF2cNumX1jtUMNOyclFoQ .env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_GEMINI_API_KEY=AIzaSyBHbOlNRFKEClCF2cNumX1jtUMNOyclFoQ

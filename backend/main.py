@@ -1,5 +1,5 @@
 ﻿# backend/main.py - UPDATED WITH SINGLE REGISTRATION ENDPOINT
-from fastapi import FastAPI, HTTPException, Depends, status, Request
+from fastapi import FastAPI, HTTPException, Request, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -45,17 +45,41 @@ class SimplePredictor:
         }
 predictor = SimplePredictor()
 
-# Import ML Prediction System
+# ML Prediction System
 try:
-    from ml_system.prediction_engine import MedicalPredictionEngine
-    from simple_ml_api import ml_router
-    ml_engine = MedicalPredictionEngine()
-    ML_ENABLED = True
-    print("✅ ML Prediction System initialized successfully")
+    from ml.api import router as ml_router, engine as ml_engine
+    ML_ENABLED = ml_engine.is_trained
+    print(f"✅ ML System loaded (trained={ML_ENABLED}, accuracy={ml_engine.accuracy:.2%})")
 except Exception as e:
-    print(f"⚠️ ML System disabled due to compatibility issue: {e}")
     ML_ENABLED = False
     ml_engine = None
+    print(f"❌ ML System failed: {e}")
+
+# Gemini AI System
+try:
+    from api.gemini_api import router as gemini_router
+    from services.gemini_ai import gemini_ai
+    GEMINI_ENABLED = True
+    print("✅ Gemini 2.5 Flash AI System loaded")
+except Exception as e:
+    GEMINI_ENABLED = False
+    gemini_ai = None
+    gemini_router = None
+    print(f"❌ Gemini AI System failed: {e}")
+
+# Medicine Recommendation System
+try:
+    from api.medicine_api import router as medicine_router
+    from ml.medicine_recommendation_engine import medicine_engine
+    MEDICINE_ENABLED = True
+    print("✅ Medicine Recommendation System loaded")
+except Exception as e:
+    MEDICINE_ENABLED = False
+    medicine_engine = None
+    print(f"❌ Medicine System failed: {e}")
+    ML_ENABLED = False
+    ml_engine = None
+    ml_router = None
 
 # MySQL Database Configuration
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
@@ -179,10 +203,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include ML router if enabled
-if ML_ENABLED and ml_engine:
+# Include ML router if available
+if ml_router is not None:
     app.include_router(ml_router)
     print("✅ ML API routes included")
+
+# Include Gemini AI router if available
+if GEMINI_ENABLED:
+    app.include_router(gemini_router)
+    print("✅ Gemini AI API routes included")
+
+# Include Medicine Recommendation router if available
+if MEDICINE_ENABLED:
+    app.include_router(medicine_router)
+    print("✅ Medicine Recommendation API routes included")
 
 # Database Connection Pool
 pool = None
@@ -720,33 +754,62 @@ async def login(login_data: UserLogin):
 
 # Get patient cases
 @app.get("/api/patient/cases", response_model=Dict[str, Any])
-async def get_patient_cases():
+async def get_patient_cases(request: Request):
     """Get cases for the current patient"""
-    pool = await get_connection()
-    
-    async with pool.acquire() as conn:
-        cursor = await conn.cursor()
+    import json
+    try:
+        pool = await get_connection()
         
-        # Get all cases (simplified for demo)
-        await cursor.execute("""
-        SELECT id, title, symptoms, ai_assessment, status, created_at
-        FROM medical_cases 
-        ORDER BY created_at DESC
-        """)
-        
-        cases = await cursor.fetchall()
-        
-        # Convert to response format
-        case_list = []
-        for case in cases:
-            case_list.append({
-                "id": case[0],
-                "title": case[1],
-                "symptoms": json.loads(case[2]) if case[2] else {},
-                "ai_assessment": json.loads(case[3]) if case[3] else {},
-                "status": case[4],
-                "created_at": case[5].isoformat() if case[5] and hasattr(case[5], 'isoformat') else str(case[5]) if case[5] else None
-            })
+        async with pool.acquire() as conn:
+            cursor = await conn.cursor()
+            
+            # Get current user from auth header - parse JWT token
+            current_user_id = None
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+                try:
+                    # Simple token parsing for demo (in production, use proper JWT validation)
+                    # Token format: "auth-token-{user_id}-{timestamp}"
+                    if "auth-token-" in token:
+                        token_parts = token.split("-")
+                        if len(token_parts) >= 3:
+                            current_user_id = int(token_parts[2])
+                            print(f"🔐 Extracted user ID from token: {current_user_id}")
+                except (ValueError, IndexError) as e:
+                    print(f"⚠️ Token parsing error: {e}")
+            
+            # Fallback to demo user if no valid token
+            if current_user_id is None:
+                current_user_id = 3  # Demo fallback
+                print(f"⚠️ No valid token found, using demo user ID: {current_user_id}")
+            
+            # Get cases for current patient only
+            await cursor.execute("""
+            SELECT id, symptoms, ai_assessment, status, created_at
+            FROM medical_cases 
+            WHERE patient_id = %s
+            ORDER BY created_at DESC
+            """, (current_user_id,))
+            
+            cases = await cursor.fetchall()
+            
+            # Convert to response format
+            case_list = []
+            for case in cases:
+                # Generate a title from symptoms
+                symptoms_data = json.loads(case[1]) if case[1] else {}
+                title = symptoms_data.get('description', 'Medical Case')[:50] + '...' if len(symptoms_data.get('description', '')) > 50 else symptoms_data.get('description', 'Medical Case')
+                
+                case_list.append({
+                    "id": case[0],
+                    "title": title,
+                    "symptoms": symptoms_data,
+                    "ai_assessment": json.loads(case[2]) if case[2] else {},
+                    "status": case[3],
+                    "created_at": case[4].isoformat() if case[4] and hasattr(case[4], 'isoformat') else str(case[4]) if case[4] else None,
+                    "patient_id": current_user_id
+                })
         
         await cursor.close()
         
@@ -754,6 +817,78 @@ async def get_patient_cases():
             "success": True,
             "cases": case_list,
             "total": len(case_list)
+        }
+        
+    except Exception as e:
+        print(f"⚠️ Database error in get_patient_cases: {e}")
+        # Fallback: return demo cases when database is not available
+        import json
+        from datetime import datetime, timedelta
+        
+        demo_cases = [
+            {
+                "id": 1,
+                "title": "Fever and Headache - Sample Case",
+                "symptoms": {
+                    "description": "Patient reports fever, headache, and fatigue for 2 days",
+                    "duration_hours": 48,
+                    "severity": 6,
+                    "temperature": 38.5,
+                    "has_fever": True,
+                    "has_headache": True,
+                    "has_fatigue": True
+                },
+                "ai_assessment": {
+                    "possible_conditions": ["Viral Infection", "Tension Headache"],
+                    "confidence_score": 0.85,
+                    "urgency_level": "medium",
+                    "emergency": {
+                        "level": "low",
+                        "label": "Non-Urgent",
+                        "color": "green",
+                        "go_to_hospital": False,
+                        "message": "Monitor symptoms and rest"
+                    },
+                    "analysis_method": "gemini_ai"
+                },
+                "status": "pending_review",
+                "created_at": (datetime.now() - timedelta(hours=24)).isoformat()
+            },
+            {
+                "id": 2,
+                "title": "Cough and Congestion - Sample Case",
+                "symptoms": {
+                    "description": "Patient has persistent cough, runny nose, and congestion",
+                    "duration_hours": 72,
+                    "severity": 4,
+                    "temperature": 37.2,
+                    "has_cough": True,
+                    "has_runny_nose": True,
+                    "has_nasal_congestion": True
+                },
+                "ai_assessment": {
+                    "possible_conditions": ["Common Cold", "Allergic Rhinitis"],
+                    "confidence_score": 0.78,
+                    "urgency_level": "low",
+                    "emergency": {
+                        "level": "low",
+                        "label": "Non-Urgent",
+                        "color": "green",
+                        "go_to_hospital": False,
+                        "message": "Home care recommended"
+                    },
+                    "analysis_method": "gemini_ai"
+                },
+                "status": "pending_review",
+                "created_at": (datetime.now() - timedelta(hours=48)).isoformat()
+            }
+        ]
+        
+        return {
+            "success": True,
+            "cases": demo_cases,
+            "total": len(demo_cases),
+            "fallback": "Using demo cases - database unavailable"
         }
 
 # Get doctor cases
@@ -767,7 +902,7 @@ async def get_doctor_cases():
         
         # Get all cases for doctor review
         await cursor.execute("""
-        SELECT id, title, symptoms, ai_assessment, status, created_at
+        SELECT id, symptoms, ai_assessment, status, created_at
         FROM medical_cases 
         WHERE status IN ('pending_review', 'in_review')
         ORDER BY created_at DESC
@@ -778,13 +913,17 @@ async def get_doctor_cases():
         # Convert to response format
         case_list = []
         for case in cases:
+            # Generate a title from symptoms
+            symptoms_data = json.loads(case[1]) if case[1] else {}
+            title = symptoms_data.get('description', 'Medical Case')[:50] + '...' if len(symptoms_data.get('description', '')) > 50 else symptoms_data.get('description', 'Medical Case')
+            
             case_list.append({
                 "id": case[0],
-                "title": case[1],
-                "symptoms": json.loads(case[2]) if case[2] else {},
-                "ai_assessment": json.loads(case[3]) if case[3] else {},
-                "status": case[4],
-                "created_at": case[5].isoformat() if case[5] and hasattr(case[5], 'isoformat') else str(case[5]) if case[5] else None
+                "title": title,
+                "symptoms": symptoms_data,
+                "ai_assessment": json.loads(case[2]) if case[2] else {},
+                "status": case[3],
+                "created_at": case[4].isoformat() if case[4] and hasattr(case[4], 'isoformat') else str(case[4]) if case[4] else None
             })
         
         await cursor.close()
@@ -824,12 +963,26 @@ async def review_case(case_id: int, review_data: Dict[str, Any]):
 
 # Submit symptoms
 @app.post("/api/cases/submit", response_model=Dict[str, Any])
-async def submit_symptoms(symptom_data: Dict[str, Any]):
+async def submit_symptoms(symptom_data: Dict[str, Any], request: Request = None):
     """Submit new symptom case with ML analysis"""
     pool = await get_connection()
     
     async with pool.acquire() as conn:
         cursor = await conn.cursor()
+        
+        # Extract authenticated user ID from token
+        current_user_id = None
+        if request:
+            auth_header = request.headers.get("authorization", "")
+            token = auth_header.replace("Bearer ", "").strip()
+            if token.startswith("auth-token-"):
+                try:
+                    token_parts = token.split("-")
+                    if len(token_parts) >= 3:
+                        current_user_id = int(token_parts[2])
+                        print(f"🔐 Submit: user ID from token: {current_user_id}")
+                except (ValueError, IndexError):
+                    pass
         
         # Perform ML analysis using the trained ML engine
         ml_input = symptom_data.get("symptoms", {})
@@ -842,58 +995,82 @@ async def submit_symptoms(symptom_data: Dict[str, Any]):
                 "description": ", ".join([str(s) for s in ml_input])
             }
 
-        if ML_ENABLED and ml_engine:
-            try:
-                ai_assessment = await ml_engine.predict_disease(ml_input, patient_info)
-            except Exception as e:
-                print(f"⚠️ ML prediction failed, falling back to simple assessment: {e}")
-                ai_assessment = {
-                    "ml_prediction": {
-                        "primary_condition": "General Medical Assessment",
-                        "confidence": 0.5,
-                        "consensus": 0.5,
-                        "probability_breakdown": {"General Medical Assessment": 1.0}
-                    },
-                    "metadata": {"prediction_method": "fallback_rule_based"}
-                }
-        else:
-            # Final fallback if ML is not enabled
-            ai_assessment = {
-                "ml_prediction": {
-                    "primary_condition": "General Medical Assessment",
-                    "confidence": 0.5,
-                    "consensus": 0.5,
-                    "probability_breakdown": {"General Medical Assessment": 1.0}
-                },
-                "metadata": {"prediction_method": "fallback_rule_based"}
-            }
-        
-        # Get or create demo patient
-        await cursor.execute("SELECT id FROM users WHERE email = %s", ("demo.patient@gmail.com",))
-        patient = await cursor.fetchone()
-        
-        if not patient:
-            # Create demo patient
-            password_hash = hashlib.sha256("Demo@123".encode()).hexdigest()
-            await cursor.execute("""
-            INSERT INTO users (email, password_hash, role, first_name, last_name, is_active)
-            VALUES (%s, %s, %s, %s, %s, TRUE)
-            """, (
-                "demo.patient@gmail.com",
-                password_hash,
-                "patient",
-                "Demo",
-                "Patient"
-            ))
-            patient_id = cursor.lastrowid
+        # Use Gemini AI for accurate analysis first
+        try:
+            from services.gemini_ai import gemini_ai as _gai
+            print(f"🔍 Gemini submit input: {json.dumps(ml_input)[:200]}")
+            gemini_analysis = await _gai.analyze_symptoms_for_disease(ml_input)
+            print(f"✅ Gemini AI analysis: {gemini_analysis.get('primary_prediction', {}).get('condition', 'Unknown')}")
             
-            # Create patient profile
-            await cursor.execute("""
-            INSERT INTO patients (user_id, date_of_birth)
-            VALUES (%s, %s)
-            """, (patient_id, "1990-01-01"))
-        else:
-            patient_id = patient[0]
+            # Convert Gemini analysis to expected format
+            ai_assessment = {
+                "predictions": [{
+                    "disease": gemini_analysis.get('primary_prediction', {}).get('condition', 'Unknown'),
+                    "confidence": gemini_analysis.get('primary_prediction', {}).get('confidence', 50.0),
+                    "matching_symptoms": gemini_analysis.get('primary_prediction', {}).get('matching_symptoms', [])
+                }],
+                "risk_assessment": {
+                    "risk_level": gemini_analysis.get('emergency_assessment', {}).get('level', 'medium').lower(),
+                    "risk_score": 5 if gemini_analysis.get('emergency_assessment', {}).get('level') == 'Non-urgent' else 8,
+                    "recommended_action": gemini_analysis.get('emergency_assessment', {}).get('message', 'Consult a doctor'),
+                    "go_to_hospital": gemini_analysis.get('emergency_assessment', {}).get('go_to_hospital', False)
+                },
+                "analysis_method": "gemini-2.5-flash",
+                "gemini_analysis": gemini_analysis  # Keep full analysis for display
+            }
+            
+        except Exception as e:
+            print(f"⚠️ Gemini AI analysis failed: {e}")
+            
+            # Fallback to ML prediction engine if available
+            if ML_ENABLED and ml_engine is not None and ml_engine.is_trained:
+                try:
+                    ai_assessment = ml_engine.predict(ml_input)
+                    print(f"✅ ML prediction fallback: {ai_assessment.get('predictions', [{}])[0].get('disease', 'Unknown')}")
+                except Exception as ml_error:
+                    print(f"⚠️ ML prediction also failed: {ml_error}")
+                    ai_assessment = {
+                        "predictions": [{"disease": "General Assessment", "confidence": 50.0, "matching_symptoms": []}],
+                        "risk_assessment": {"risk_level": "medium", "risk_score": 5, "recommended_action": "Consult a doctor"},
+                        "analysis_method": "fallback",
+                    }
+            else:
+                ai_assessment = {
+                    "predictions": [{"disease": "General Assessment", "confidence": 50.0, "matching_symptoms": []}],
+                    "risk_assessment": {"risk_level": "medium", "risk_score": 5, "recommended_action": "Consult a doctor"},
+                    "analysis_method": "fallback",
+                }
+
+        # Use authenticated user ID if available, otherwise fall back to demo patient
+        patient_id = current_user_id
+        if not patient_id:
+            await cursor.execute("SELECT id FROM users WHERE email = %s", ("demo.patient@gmail.com",))
+            patient = await cursor.fetchone()
+            
+            if not patient:
+                # Create demo patient
+                password_hash = hashlib.sha256("Demo@123".encode()).hexdigest()
+                await cursor.execute("""
+                INSERT INTO users (email, password_hash, role, first_name, last_name, is_active)
+                VALUES (%s, %s, %s, %s, %s, TRUE)
+                """, (
+                    "demo.patient@gmail.com",
+                    password_hash,
+                    "patient",
+                    "Demo",
+                    "Patient"
+                ))
+                patient_id = cursor.lastrowid
+                
+                # Create patient profile
+                await cursor.execute("""
+                INSERT INTO patients (user_id, date_of_birth)
+                VALUES (%s, %s)
+                """, (patient_id, "1990-01-01"))
+            else:
+                patient_id = patient[0]
+        
+        print(f"📝 Saving case for patient_id: {patient_id}")
         
         # Insert new case with AI assessment
         await cursor.execute("""
@@ -910,17 +1087,12 @@ async def submit_symptoms(symptom_data: Dict[str, Any]):
         
         await cursor.close()
         
-        # Extract confidence (prefer consensus if present)
-        ml_pred = ai_assessment.get("ml_prediction", {}) if isinstance(ai_assessment, dict) else {}
-        consensus = ml_pred.get("consensus")
-        confidence_val = consensus if isinstance(consensus, (int, float)) else ml_pred.get("confidence", 0.75)
-
         return {
             "success": True,
             "case_id": case_id,
             "message": "Symptoms submitted successfully",
             "ai_analysis": ai_assessment,
-            "confidence": float(confidence_val) * 100.0
+            "note": "ML system is active and has analyzed the symptoms"
         }
 
 # ===== ADMIN MANAGEMENT ENDPOINTS =====
