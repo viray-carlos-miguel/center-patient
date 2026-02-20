@@ -16,3 +16,9 @@ local.properties
 
 # misc
 .env
+
+# ML Models (too large for GitHub)
+backend/ml/models/*.pkl
+backend/ml/models/*.joblib
+backend/ml/models/*.h5
+backend/ml/models/*.pth
