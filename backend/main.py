@@ -784,12 +784,13 @@ async def get_patient_cases(request: Request):
                 current_user_id = 3  # Demo fallback
                 print(f"⚠️ No valid token found, using demo user ID: {current_user_id}")
             
-            # Get cases for current patient only
+            # Get cases for current patient only with patient name and prescription
             await cursor.execute("""
-            SELECT id, symptoms, ai_assessment, status, created_at
-            FROM medical_cases 
-            WHERE patient_id = %s
-            ORDER BY created_at DESC
+            SELECT c.id, c.symptoms, c.ai_assessment, c.status, c.created_at, c.doctor_diagnosis, c.doctor_notes, c.prescription, c.reviewed_at, u.first_name, u.last_name
+            FROM medical_cases c
+            JOIN users u ON c.patient_id = u.id
+            WHERE c.patient_id = %s
+            ORDER BY c.created_at DESC
             """, (current_user_id,))
             
             cases = await cursor.fetchall()
@@ -808,7 +809,12 @@ async def get_patient_cases(request: Request):
                     "ai_assessment": json.loads(case[2]) if case[2] else {},
                     "status": case[3],
                     "created_at": case[4].isoformat() if case[4] and hasattr(case[4], 'isoformat') else str(case[4]) if case[4] else None,
-                    "patient_id": current_user_id
+                    "doctor_diagnosis": case[5],
+                    "doctor_notes": case[6],
+                    "prescription": json.loads(case[7]) if case[7] else None,
+                    "reviewed_at": case[8].isoformat() if case[8] and hasattr(case[8], 'isoformat') else str(case[8]) if case[8] else None,
+                    "patient_id": current_user_id,
+                    "patient_name": f"{case[9]} {case[10]}"  # first_name, last_name from users table
                 })
         
         await cursor.close()
@@ -900,12 +906,13 @@ async def get_doctor_cases():
     async with pool.acquire() as conn:
         cursor = await conn.cursor()
         
-        # Get all cases for doctor review
+        # Get all cases for doctor review with patient names
         await cursor.execute("""
-        SELECT id, symptoms, ai_assessment, status, created_at
-        FROM medical_cases 
-        WHERE status IN ('pending_review', 'in_review')
-        ORDER BY created_at DESC
+        SELECT c.id, c.symptoms, c.ai_assessment, c.status, c.created_at, u.first_name, u.last_name
+        FROM medical_cases c
+        JOIN users u ON c.patient_id = u.id
+        WHERE c.status IN ('pending_review', 'in_review')
+        ORDER BY c.created_at DESC
         """)
         
         cases = await cursor.fetchall()
@@ -923,7 +930,8 @@ async def get_doctor_cases():
                 "symptoms": symptoms_data,
                 "ai_assessment": json.loads(case[2]) if case[2] else {},
                 "status": case[3],
-                "created_at": case[4].isoformat() if case[4] and hasattr(case[4], 'isoformat') else str(case[4]) if case[4] else None
+                "created_at": case[4].isoformat() if case[4] and hasattr(case[4], 'isoformat') else str(case[4]) if case[4] else None,
+                "patient_name": f"{case[5]} {case[6]}"  # first_name, last_name from users table
             })
         
         await cursor.close()
@@ -943,14 +951,19 @@ async def review_case(case_id: int, review_data: Dict[str, Any]):
     async with pool.acquire() as conn:
         cursor = await conn.cursor()
         
-        # Update case with review
+        # Extract prescription data if present
+        prescription_data = review_data.get("prescription")
+        prescription_json = json.dumps(prescription_data) if prescription_data else None
+        
+        # Update case with review including prescription
         await cursor.execute("""
         UPDATE medical_cases 
-        SET doctor_diagnosis = %s, doctor_notes = %s, status = 'completed', reviewed_at = CURRENT_TIMESTAMP
+        SET doctor_diagnosis = %s, doctor_notes = %s, prescription = %s, status = 'completed', reviewed_at = CURRENT_TIMESTAMP
         WHERE id = %s
         """, (
             review_data.get("doctor_diagnosis", ""),
             review_data.get("doctor_notes", ""),
+            prescription_json,
             case_id
         ))
         
