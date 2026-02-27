@@ -896,6 +896,23 @@ async def get_patient_cases(request: Request):
                 symptoms_data = json.loads(case[1]) if case[1] else {}
                 title = symptoms_data.get('description', 'Medical Case')[:50] + '...' if len(symptoms_data.get('description', '')) > 50 else symptoms_data.get('description', 'Medical Case')
                 
+                # Parse prescription data
+                prescription_data = json.loads(case[7]) if case[7] else None
+                
+                # If prescription exists, try to get the signature from prescriptions table
+                if prescription_data:
+                    await cursor.execute("""
+                    SELECT doctor_signature FROM prescriptions 
+                    WHERE case_id = %s 
+                    ORDER BY created_at DESC 
+                    LIMIT 1
+                    """, (case[0],))
+                    signature_result = await cursor.fetchone()
+                    
+                    if signature_result and signature_result[0]:
+                        # Add signature to prescription data
+                        prescription_data['doctor_signature'] = signature_result[0]
+                
                 case_list.append({
                     "id": case[0],
                     "title": title,
@@ -905,7 +922,7 @@ async def get_patient_cases(request: Request):
                     "created_at": case[4].isoformat() if case[4] and hasattr(case[4], 'isoformat') else str(case[4]) if case[4] else None,
                     "doctor_diagnosis": case[5],
                     "doctor_notes": case[6],
-                    "prescription": json.loads(case[7]) if case[7] else None,
+                    "prescription": prescription_data,
                     "reviewed_at": case[8].isoformat() if case[8] and hasattr(case[8], 'isoformat') else str(case[8]) if case[8] else None,
                     "patient_id": current_user_id,
                     "patient_name": f"{case[9]} {case[10]}"  # first_name, last_name from users table
@@ -1070,31 +1087,33 @@ async def review_case(case_id: int, review_data: Dict[str, Any]):
             case_id
         ))
         
-        # Create prescription record if prescription data exists
-        prescription_id = None
-        if prescription_data:
-            await cursor.execute("""
-            INSERT INTO prescriptions (case_id, patient_id, doctor_id, medication_name, dosage, frequency, duration, instructions, doctor_signature, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-            """, (
-                case_id,
-                patient_id,
-                review_data.get("doctor_id", 1),  # Get from auth token in real implementation
-                prescription_data.get("medication_name", ""),
-                prescription_data.get("dosage", ""),
-                prescription_data.get("frequency", ""),
-                prescription_data.get("duration", ""),
-                prescription_data.get("instructions", ""),
-                review_data.get("doctor_signature", "")
-            ))
-            prescription_id = cursor.lastrowid
+        # Create prescription records if prescription data exists
+        prescription_ids = []
+        if prescription_data and prescription_data.get("medicines"):
+            medicines = prescription_data.get("medicines", [])
+            for medicine in medicines:
+                await cursor.execute("""
+                INSERT INTO prescriptions (case_id, patient_id, doctor_id, medication_name, dosage, frequency, duration, instructions, doctor_signature, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                """, (
+                    case_id,
+                    patient_id,
+                    review_data.get("doctor_id", 1),  # Get from auth token in real implementation
+                    medicine.get("medication_name", ""),
+                    medicine.get("dosage", ""),
+                    medicine.get("frequency", ""),
+                    medicine.get("duration_days", ""),
+                    medicine.get("instructions", ""),
+                    prescription_data.get("doctor_signature", "")
+                ))
+                prescription_ids.append(cursor.lastrowid)
         
         await cursor.close()
         
         return {
             "success": True,
             "message": "Case reviewed successfully",
-            "prescription_id": prescription_id,
+            "prescription_ids": prescription_ids,
             "patient_id": patient_id
         }
 
