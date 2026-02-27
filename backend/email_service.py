@@ -80,11 +80,13 @@ class EmailService:
         
         text_content = f"""Dear Dr. {doctor_name},
 
-Your doctor account registration has been approved by our admin team.
+Congratulations! Your doctor account registration has been approved by our admin team.
+
+Your account is now active and ready for use.
 
 Login Details:
 Email: {doctor_email}
-Password: [Your registration password]
+Password: Use the password you created during registration
 
 You can now access the doctor dashboard and start reviewing patient cases.
 
@@ -92,6 +94,11 @@ To get started:
 1. Visit: http://localhost:3000/auth/login
 2. Enter your email and password
 3. Access your professional dashboard
+
+Important Security Notes:
+- Never share your login credentials
+- Change your password regularly
+- Contact support if you suspect unauthorized access
 
 Best regards,
 Medical Center Pro Team
@@ -112,6 +119,7 @@ Medical Center Pro Team
         .button {{ display: inline-block; background: #4CAF50; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }}
         .footer {{ text-align: center; color: #666; margin-top: 20px; font-size: 12px; }}
         .details {{ background: #e8f5e8; padding: 15px; border-radius: 5px; margin: 20px 0; }}
+        .security {{ background: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107; }}
     </style>
 </head>
 <body>
@@ -124,44 +132,45 @@ Medical Center Pro Team
         <div class="content">
             <p>Dear <strong>Dr. {doctor_name}</strong>,</p>
             
-            <p>Congratulations! Your doctor account registration has been approved by our admin team. You now have full access to the Medical Center Pro platform.</p>
+            <p>Congratulations! Your doctor account registration has been approved by our admin team.</p>
+            
+            <p>Your account is now <strong>active and ready for use</strong>.</p>
             
             <div class="details">
-                <h3>📋 Account Details:</h3>
+                <h3>🔐 Login Details:</h3>
                 <p><strong>Email:</strong> {doctor_email}<br>
-                <strong>Password:</strong> [Your registration password]</p>
+                <strong>Password:</strong> Use the password you created during registration</p>
             </div>
             
-            <h3>🚀 Next Steps:</h3>
-            <ol>
-                <li>Visit the login page</li>
-                <li>Enter your email and password</li>
-                <li>Access your professional dashboard</li>
-                <li>Start reviewing patient cases</li>
-            </ol>
+            <p>You can now access the doctor dashboard and start reviewing patient cases.</p>
             
             <div style="text-align: center;">
                 <a href="http://localhost:3000/auth/login" class="button">Login to Your Account</a>
             </div>
             
-            <p><strong>What you can do as a verified doctor:</strong></p>
-            <ul>
-                <li>✅ Review patient cases with AI assessments</li>
-                <li>✅ Provide educational diagnoses</li>
-                <li>✅ Create treatment recommendations</li>
-                <li>✅ Manage patient records</li>
-            </ul>
+            <h3>🚀 To get started:</h3>
+            <ol>
+                <li>Visit: <a href="http://localhost:3000/auth/login">http://localhost:3000/auth/login</a></li>
+                <li>Enter your email and password</li>
+                <li>Access your professional dashboard</li>
+            </ol>
             
-            <p>If you have any questions, please don't hesitate to contact our support team.</p>
+            <div class="security">
+                <h3>🔒 Important Security Notes:</h3>
+                <ul>
+                    <li>Never share your login credentials</li>
+                    <li>Change your password regularly</li>
+                    <li>Contact support if you suspect unauthorized access</li>
+                </ul>
+            </div>
             
             <p>Best regards,<br>
-            <strong>The Medical Center Pro Team</strong></p>
+            <strong>Medical Center Pro Team</strong></p>
         </div>
         
         <div class="footer">
-            <p>This is an automated message. Please do not reply to this email.</p>
-            <p>Medical Center Pro - Advanced Medical Diagnosis Platform</p>
-            <p>{datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+            <p>This email was sent on {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+            <p>© 2026 Medical Center Pro. All rights reserved.</p>
         </div>
     </div>
 </body>

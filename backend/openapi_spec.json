@@ -1,0 +1,626 @@
+﻿{
+    "openapi":  "3.1.0",
+    "info":  {
+                 "title":  "DXscope API",
+                 "description":  "Advanced Medical Diagnosis Platform with AI-Powered Analysis and ML Predictions",
+                 "version":  "2.0.0"
+             },
+    "paths":  {
+                  "/":  {
+                            "get":  {
+                                        "summary":  "Root",
+                                        "operationId":  "root__get",
+                                        "responses":  {
+                                                          "200":  {
+                                                                      "description":  "Successful Response",
+                                                                      "content":  {
+                                                                                      "application/json":  {
+                                                                                                               "schema":  {
+
+                                                                                                                          }
+                                                                                                           }
+                                                                                  }
+                                                                  }
+                                                      }
+                                    }
+                        },
+                  "/api/auth/register":  {
+                                             "post":  {
+                                                          "summary":  "Register User",
+                                                          "description":  "Register a new user - auto-detect role by email domain",
+                                                          "operationId":  "register_user_api_auth_register_post",
+                                                          "requestBody":  {
+                                                                              "content":  {
+                                                                                              "application/json":  {
+                                                                                                                       "schema":  {
+                                                                                                                                      "$ref":  "#/components/schemas/Registration"
+                                                                                                                                  }
+                                                                                                                   }
+                                                                                          },
+                                                                              "required":  true
+                                                                          },
+                                                          "responses":  {
+                                                                            "200":  {
+                                                                                        "description":  "Successful Response",
+                                                                                        "content":  {
+                                                                                                        "application/json":  {
+                                                                                                                                 "schema":  {
+                                                                                                                                                "type":  "object",
+                                                                                                                                                "title":  "Response Register User Api Auth Register Post"
+                                                                                                                                            }
+                                                                                                                             }
+                                                                                                    }
+                                                                                    },
+                                                                            "422":  {
+                                                                                        "description":  "Validation Error",
+                                                                                        "content":  {
+                                                                                                        "application/json":  {
+                                                                                                                                 "schema":  {
+                                                                                                                                                "$ref":  "#/components/schemas/HTTPValidationError"
+                                                                                                                                            }
+                                                                                                                             }
+                                                                                                    }
+                                                                                    }
+                                                                        }
+                                                      }
+                                         },
+                  "/api/auth/login":  {
+                                          "post":  {
+                                                       "summary":  "Login",
+                                                       "description":  "Authenticate user with MySQL - NO AUTO-REGISTRATION",
+                                                       "operationId":  "login_api_auth_login_post",
+                                                       "requestBody":  {
+                                                                           "content":  {
+                                                                                           "application/json":  {
+                                                                                                                    "schema":  {
+                                                                                                                                   "$ref":  "#/components/schemas/UserLogin"
+                                                                                                                               }
+                                                                                                                }
+                                                                                       },
+                                                                           "required":  true
+                                                                       },
+                                                       "responses":  {
+                                                                         "200":  {
+                                                                                     "description":  "Successful Response",
+                                                                                     "content":  {
+                                                                                                     "application/json":  {
+                                                                                                                              "schema":  {
+                                                                                                                                             "type":  "object",
+                                                                                                                                             "title":  "Response Login Api Auth Login Post"
+                                                                                                                                         }
+                                                                                                                          }
+                                                                                                 }
+                                                                                 },
+                                                                         "422":  {
+                                                                                     "description":  "Validation Error",
+                                                                                     "content":  {
+                                                                                                     "application/json":  {
+                                                                                                                              "schema":  {
+                                                                                                                                             "$ref":  "#/components/schemas/HTTPValidationError"
+                                                                                                                                         }
+                                                                                                                          }
+                                                                                                 }
+                                                                                 }
+                                                                     }
+                                                   }
+                                      },
+                  "/api/patient/cases":  {
+                                             "get":  {
+                                                         "summary":  "Get Patient Cases",
+                                                         "description":  "Get cases for the current patient",
+                                                         "operationId":  "get_patient_cases_api_patient_cases_get",
+                                                         "responses":  {
+                                                                           "200":  {
+                                                                                       "description":  "Successful Response",
+                                                                                       "content":  {
+                                                                                                       "application/json":  {
+                                                                                                                                "schema":  {
+                                                                                                                                               "type":  "object",
+                                                                                                                                               "title":  "Response Get Patient Cases Api Patient Cases Get"
+                                                                                                                                           }
+                                                                                                                            }
+                                                                                                   }
+                                                                                   }
+                                                                       }
+                                                     }
+                                         },
+                  "/api/doctor/cases":  {
+                                            "get":  {
+                                                        "summary":  "Get Doctor Cases",
+                                                        "description":  "Get cases for doctor review",
+                                                        "operationId":  "get_doctor_cases_api_doctor_cases_get",
+                                                        "responses":  {
+                                                                          "200":  {
+                                                                                      "description":  "Successful Response",
+                                                                                      "content":  {
+                                                                                                      "application/json":  {
+                                                                                                                               "schema":  {
+                                                                                                                                              "type":  "object",
+                                                                                                                                              "title":  "Response Get Doctor Cases Api Doctor Cases Get"
+                                                                                                                                          }
+                                                                                                                           }
+                                                                                                  }
+                                                                                  }
+                                                                      }
+                                                    }
+                                        },
+                  "/api/cases/{case_id}/review":  {
+                                                      "post":  {
+                                                                   "summary":  "Review Case",
+                                                                   "description":  "Review a medical case",
+                                                                   "operationId":  "review_case_api_cases__case_id__review_post",
+                                                                   "parameters":  [
+                                                                                      {
+                                                                                          "name":  "case_id",
+                                                                                          "in":  "path",
+                                                                                          "required":  true,
+                                                                                          "schema":  {
+                                                                                                         "type":  "integer",
+                                                                                                         "title":  "Case Id"
+                                                                                                     }
+                                                                                      }
+                                                                                  ],
+                                                                   "requestBody":  {
+                                                                                       "required":  true,
+                                                                                       "content":  {
+                                                                                                       "application/json":  {
+                                                                                                                                "schema":  {
+                                                                                                                                               "type":  "object",
+                                                                                                                                               "title":  "Review Data"
+                                                                                                                                           }
+                                                                                                                            }
+                                                                                                   }
+                                                                                   },
+                                                                   "responses":  {
+                                                                                     "200":  {
+                                                                                                 "description":  "Successful Response",
+                                                                                                 "content":  {
+                                                                                                                 "application/json":  {
+                                                                                                                                          "schema":  {
+                                                                                                                                                         "type":  "object",
+                                                                                                                                                         "title":  "Response Review Case Api Cases  Case Id  Review Post"
+                                                                                                                                                     }
+                                                                                                                                      }
+                                                                                                             }
+                                                                                             },
+                                                                                     "422":  {
+                                                                                                 "description":  "Validation Error",
+                                                                                                 "content":  {
+                                                                                                                 "application/json":  {
+                                                                                                                                          "schema":  {
+                                                                                                                                                         "$ref":  "#/components/schemas/HTTPValidationError"
+                                                                                                                                                     }
+                                                                                                                                      }
+                                                                                                             }
+                                                                                             }
+                                                                                 }
+                                                               }
+                                                  },
+                  "/api/cases/submit":  {
+                                            "post":  {
+                                                         "summary":  "Submit Symptoms",
+                                                         "description":  "Submit new symptom case with ML analysis",
+                                                         "operationId":  "submit_symptoms_api_cases_submit_post",
+                                                         "requestBody":  {
+                                                                             "content":  {
+                                                                                             "application/json":  {
+                                                                                                                      "schema":  {
+                                                                                                                                     "type":  "object",
+                                                                                                                                     "title":  "Symptom Data"
+                                                                                                                                 }
+                                                                                                                  }
+                                                                                         },
+                                                                             "required":  true
+                                                                         },
+                                                         "responses":  {
+                                                                           "200":  {
+                                                                                       "description":  "Successful Response",
+                                                                                       "content":  {
+                                                                                                       "application/json":  {
+                                                                                                                                "schema":  {
+                                                                                                                                               "type":  "object",
+                                                                                                                                               "title":  "Response Submit Symptoms Api Cases Submit Post"
+                                                                                                                                           }
+                                                                                                                            }
+                                                                                                   }
+                                                                                   },
+                                                                           "422":  {
+                                                                                       "description":  "Validation Error",
+                                                                                       "content":  {
+                                                                                                       "application/json":  {
+                                                                                                                                "schema":  {
+                                                                                                                                               "$ref":  "#/components/schemas/HTTPValidationError"
+                                                                                                                                           }
+                                                                                                                            }
+                                                                                                   }
+                                                                                   }
+                                                                       }
+                                                     }
+                                        },
+                  "/api/admin/health":  {
+                                            "get":  {
+                                                        "summary":  "Admin Health Check",
+                                                        "description":  "Health check for admin endpoints",
+                                                        "operationId":  "admin_health_check_api_admin_health_get",
+                                                        "responses":  {
+                                                                          "200":  {
+                                                                                      "description":  "Successful Response",
+                                                                                      "content":  {
+                                                                                                      "application/json":  {
+                                                                                                                               "schema":  {
+                                                                                                                                              "type":  "object",
+                                                                                                                                              "title":  "Response Admin Health Check Api Admin Health Get"
+                                                                                                                                          }
+                                                                                                                           }
+                                                                                                  }
+                                                                                  }
+                                                                      }
+                                                    }
+                                        },
+                  "/api/admin/create-admin":  {
+                                                  "post":  {
+                                                               "summary":  "Create Admin Account",
+                                                               "description":  "Create a new admin account (existing admin only)",
+                                                               "operationId":  "create_admin_account_api_admin_create_admin_post",
+                                                               "requestBody":  {
+                                                                                   "content":  {
+                                                                                                   "application/json":  {
+                                                                                                                            "schema":  {
+                                                                                                                                           "type":  "object",
+                                                                                                                                           "title":  "Admin Data"
+                                                                                                                                       }
+                                                                                                                        }
+                                                                                               },
+                                                                                   "required":  true
+                                                                               },
+                                                               "responses":  {
+                                                                                 "200":  {
+                                                                                             "description":  "Successful Response",
+                                                                                             "content":  {
+                                                                                                             "application/json":  {
+                                                                                                                                      "schema":  {
+                                                                                                                                                     "type":  "object",
+                                                                                                                                                     "title":  "Response Create Admin Account Api Admin Create Admin Post"
+                                                                                                                                                 }
+                                                                                                                                  }
+                                                                                                         }
+                                                                                         },
+                                                                                 "422":  {
+                                                                                             "description":  "Validation Error",
+                                                                                             "content":  {
+                                                                                                             "application/json":  {
+                                                                                                                                      "schema":  {
+                                                                                                                                                     "$ref":  "#/components/schemas/HTTPValidationError"
+                                                                                                                                                 }
+                                                                                                                                  }
+                                                                                                         }
+                                                                                         }
+                                                                             }
+                                                           }
+                                              },
+                  "/api/admin/users":  {
+                                           "get":  {
+                                                       "summary":  "Get All Users",
+                                                       "description":  "Get all users (admin only)",
+                                                       "operationId":  "get_all_users_api_admin_users_get",
+                                                       "responses":  {
+                                                                         "200":  {
+                                                                                     "description":  "Successful Response",
+                                                                                     "content":  {
+                                                                                                     "application/json":  {
+                                                                                                                              "schema":  {
+                                                                                                                                             "type":  "object",
+                                                                                                                                             "title":  "Response Get All Users Api Admin Users Get"
+                                                                                                                                         }
+                                                                                                                          }
+                                                                                                 }
+                                                                                 }
+                                                                     }
+                                                   }
+                                       },
+                  "/api/admin/doctors":  {
+                                             "get":  {
+                                                         "summary":  "Get Doctors For Verification",
+                                                         "description":  "Get all doctors for admin verification",
+                                                         "operationId":  "get_doctors_for_verification_api_admin_doctors_get",
+                                                         "responses":  {
+                                                                           "200":  {
+                                                                                       "description":  "Successful Response",
+                                                                                       "content":  {
+                                                                                                       "application/json":  {
+                                                                                                                                "schema":  {
+                                                                                                                                               "type":  "object",
+                                                                                                                                               "title":  "Response Get Doctors For Verification Api Admin Doctors Get"
+                                                                                                                                           }
+                                                                                                                            }
+                                                                                                   }
+                                                                                   }
+                                                                       }
+                                                     }
+                                         },
+                  "/api/admin/doctors/{doctor_id}/verify":  {
+                                                                "post":  {
+                                                                             "summary":  "Verify Doctor",
+                                                                             "description":  "Verify or reject a doctor\u0027s credentials",
+                                                                             "operationId":  "verify_doctor_api_admin_doctors__doctor_id__verify_post",
+                                                                             "parameters":  [
+                                                                                                {
+                                                                                                    "name":  "doctor_id",
+                                                                                                    "in":  "path",
+                                                                                                    "required":  true,
+                                                                                                    "schema":  {
+                                                                                                                   "type":  "integer",
+                                                                                                                   "title":  "Doctor Id"
+                                                                                                               }
+                                                                                                }
+                                                                                            ],
+                                                                             "requestBody":  {
+                                                                                                 "required":  true,
+                                                                                                 "content":  {
+                                                                                                                 "application/json":  {
+                                                                                                                                          "schema":  {
+                                                                                                                                                         "type":  "object",
+                                                                                                                                                         "title":  "Verification Data"
+                                                                                                                                                     }
+                                                                                                                                      }
+                                                                                                             }
+                                                                                             },
+                                                                             "responses":  {
+                                                                                               "200":  {
+                                                                                                           "description":  "Successful Response",
+                                                                                                           "content":  {
+                                                                                                                           "application/json":  {
+                                                                                                                                                    "schema":  {
+                                                                                                                                                                   "type":  "object",
+                                                                                                                                                                   "title":  "Response Verify Doctor Api Admin Doctors  Doctor Id  Verify Post"
+                                                                                                                                                               }
+                                                                                                                                                }
+                                                                                                                       }
+                                                                                                       },
+                                                                                               "422":  {
+                                                                                                           "description":  "Validation Error",
+                                                                                                           "content":  {
+                                                                                                                           "application/json":  {
+                                                                                                                                                    "schema":  {
+                                                                                                                                                                   "$ref":  "#/components/schemas/HTTPValidationError"
+                                                                                                                                                               }
+                                                                                                                                                }
+                                                                                                                       }
+                                                                                                       }
+                                                                                           }
+                                                                         }
+                                                            },
+                  "/api/admin/users/{user_id}/toggle-status":  {
+                                                                   "post":  {
+                                                                                "summary":  "Toggle User Status",
+                                                                                "description":  "Enable or disable a user account",
+                                                                                "operationId":  "toggle_user_status_api_admin_users__user_id__toggle_status_post",
+                                                                                "parameters":  [
+                                                                                                   {
+                                                                                                       "name":  "user_id",
+                                                                                                       "in":  "path",
+                                                                                                       "required":  true,
+                                                                                                       "schema":  {
+                                                                                                                      "type":  "integer",
+                                                                                                                      "title":  "User Id"
+                                                                                                                  }
+                                                                                                   }
+                                                                                               ],
+                                                                                "responses":  {
+                                                                                                  "200":  {
+                                                                                                              "description":  "Successful Response",
+                                                                                                              "content":  {
+                                                                                                                              "application/json":  {
+                                                                                                                                                       "schema":  {
+                                                                                                                                                                      "type":  "object",
+                                                                                                                                                                      "title":  "Response Toggle User Status Api Admin Users  User Id  Toggle Status Post"
+                                                                                                                                                                  }
+                                                                                                                                                   }
+                                                                                                                          }
+                                                                                                          },
+                                                                                                  "422":  {
+                                                                                                              "description":  "Validation Error",
+                                                                                                              "content":  {
+                                                                                                                              "application/json":  {
+                                                                                                                                                       "schema":  {
+                                                                                                                                                                      "$ref":  "#/components/schemas/HTTPValidationError"
+                                                                                                                                                                  }
+                                                                                                                                                   }
+                                                                                                                          }
+                                                                                                          }
+                                                                                              }
+                                                                            }
+                                                               },
+                  "/api/admin/stats":  {
+                                           "get":  {
+                                                       "summary":  "Get Admin Stats",
+                                                       "description":  "Get system statistics for admin dashboard",
+                                                       "operationId":  "get_admin_stats_api_admin_stats_get",
+                                                       "responses":  {
+                                                                         "200":  {
+                                                                                     "description":  "Successful Response",
+                                                                                     "content":  {
+                                                                                                     "application/json":  {
+                                                                                                                              "schema":  {
+                                                                                                                                             "type":  "object",
+                                                                                                                                             "title":  "Response Get Admin Stats Api Admin Stats Get"
+                                                                                                                                         }
+                                                                                                                          }
+                                                                                                 }
+                                                                                 }
+                                                                     }
+                                                   }
+                                       },
+                  "/api/admin/login-activity":  {
+                                                    "get":  {
+                                                                "summary":  "Get Login Activity",
+                                                                "description":  "Get recent login activity (admin only)",
+                                                                "operationId":  "get_login_activity_api_admin_login_activity_get",
+                                                                "responses":  {
+                                                                                  "200":  {
+                                                                                              "description":  "Successful Response",
+                                                                                              "content":  {
+                                                                                                              "application/json":  {
+                                                                                                                                       "schema":  {
+                                                                                                                                                      "type":  "object",
+                                                                                                                                                      "title":  "Response Get Login Activity Api Admin Login Activity Get"
+                                                                                                                                                  }
+                                                                                                                                   }
+                                                                                                          }
+                                                                                          }
+                                                                              }
+                                                            }
+                                                }
+              },
+    "components":  {
+                       "schemas":  {
+                                       "HTTPValidationError":  {
+                                                                   "properties":  {
+                                                                                      "detail":  {
+                                                                                                     "items":  {
+                                                                                                                   "$ref":  "#/components/schemas/ValidationError"
+                                                                                                               },
+                                                                                                     "type":  "array",
+                                                                                                     "title":  "Detail"
+                                                                                                 }
+                                                                                  },
+                                                                   "type":  "object",
+                                                                   "title":  "HTTPValidationError"
+                                                               },
+                                       "Registration":  {
+                                                            "properties":  {
+                                                                               "first_name":  {
+                                                                                                  "type":  "string",
+                                                                                                  "title":  "First Name"
+                                                                                              },
+                                                                               "last_name":  {
+                                                                                                 "type":  "string",
+                                                                                                 "title":  "Last Name"
+                                                                                             },
+                                                                               "email":  {
+                                                                                             "type":  "string",
+                                                                                             "format":  "email",
+                                                                                             "title":  "Email"
+                                                                                         },
+                                                                               "password":  {
+                                                                                                "type":  "string",
+                                                                                                "title":  "Password"
+                                                                                            },
+                                                                               "date_of_birth":  {
+                                                                                                     "anyOf":  [
+                                                                                                                   {
+                                                                                                                       "type":  "string"
+                                                                                                                   },
+                                                                                                                   {
+                                                                                                                       "type":  "null"
+                                                                                                                   }
+                                                                                                               ],
+                                                                                                     "title":  "Date Of Birth"
+                                                                                                 },
+                                                                               "phone":  {
+                                                                                             "anyOf":  [
+                                                                                                           {
+                                                                                                               "type":  "string"
+                                                                                                           },
+                                                                                                           {
+                                                                                                               "type":  "null"
+                                                                                                           }
+                                                                                                       ],
+                                                                                             "title":  "Phone"
+                                                                                         },
+                                                                               "medical_license":  {
+                                                                                                       "anyOf":  [
+                                                                                                                     {
+                                                                                                                         "type":  "string"
+                                                                                                                     },
+                                                                                                                     {
+                                                                                                                         "type":  "null"
+                                                                                                                     }
+                                                                                                                 ],
+                                                                                                       "title":  "Medical License"
+                                                                                                   },
+                                                                               "specialization":  {
+                                                                                                      "anyOf":  [
+                                                                                                                    {
+                                                                                                                        "type":  "string"
+                                                                                                                    },
+                                                                                                                    {
+                                                                                                                        "type":  "null"
+                                                                                                                    }
+                                                                                                                ],
+                                                                                                      "title":  "Specialization"
+                                                                                                  },
+                                                                               "agree_to_terms":  {
+                                                                                                      "type":  "boolean",
+                                                                                                      "title":  "Agree To Terms"
+                                                                                                  },
+                                                                               "acknowledge_educational":  {
+                                                                                                               "type":  "boolean",
+                                                                                                               "title":  "Acknowledge Educational"
+                                                                                                           }
+                                                                           },
+                                                            "type":  "object",
+                                                            "required":  [
+                                                                             "first_name",
+                                                                             "last_name",
+                                                                             "email",
+                                                                             "password",
+                                                                             "agree_to_terms",
+                                                                             "acknowledge_educational"
+                                                                         ],
+                                                            "title":  "Registration"
+                                                        },
+                                       "UserLogin":  {
+                                                         "properties":  {
+                                                                            "email":  {
+                                                                                          "type":  "string",
+                                                                                          "title":  "Email"
+                                                                                      },
+                                                                            "password":  {
+                                                                                             "type":  "string",
+                                                                                             "title":  "Password"
+                                                                                         }
+                                                                        },
+                                                         "type":  "object",
+                                                         "required":  [
+                                                                          "email",
+                                                                          "password"
+                                                                      ],
+                                                         "title":  "UserLogin"
+                                                     },
+                                       "ValidationError":  {
+                                                               "properties":  {
+                                                                                  "loc":  {
+                                                                                              "items":  {
+                                                                                                            "anyOf":  [
+                                                                                                                          {
+                                                                                                                              "type":  "string"
+                                                                                                                          },
+                                                                                                                          {
+                                                                                                                              "type":  "integer"
+                                                                                                                          }
+                                                                                                                      ]
+                                                                                                        },
+                                                                                              "type":  "array",
+                                                                                              "title":  "Location"
+                                                                                          },
+                                                                                  "msg":  {
+                                                                                              "type":  "string",
+                                                                                              "title":  "Message"
+                                                                                          },
+                                                                                  "type":  {
+                                                                                               "type":  "string",
+                                                                                               "title":  "Error Type"
+                                                                                           }
+                                                                              },
+                                                               "type":  "object",
+                                                               "required":  [
+                                                                                "loc",
+                                                                                "msg",
+                                                                                "type"
+                                                                            ],
+                                                               "title":  "ValidationError"
+                                                           }
+                                   }
+                   }
+}

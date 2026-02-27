@@ -186,6 +186,21 @@ async def get_comprehensive_analysis(request: ComprehensiveAnalysisRequest):
             patient_profile=request.patient_profile
         )
         
+        # Get doctor verification
+        verification = await gemini_ai.verify_medical_assessment(
+            patient_case={
+                "symptoms": request.symptoms,
+                "patient_profile": request.patient_profile
+            },
+            ai_diagnosis=primary_diagnosis
+        )
+        
+        # Get side effects prediction
+        side_effects = await gemini_ai.predict_side_effects(
+            medications=[med.name for med in medicine_recommendations],
+            patient_profile=request.patient_profile
+        )
+        
         return {
             "success": True,
             "comprehensive_analysis": {
@@ -210,7 +225,27 @@ async def get_comprehensive_analysis(request: ComprehensiveAnalysisRequest):
                     "success_probability": treatment_analysis.success_probability,
                     "lifestyle_recommendations": treatment_analysis.lifestyle_recommendations,
                     "follow_up_care": treatment_analysis.follow_up_care,
-                    "emergency_indicators": treatment_analysis.emergency_indicators
+                    "emergency_indicators": treatment_analysis.emergency_indicators,
+                    "home_care": treatment_analysis.home_care,
+                    "hospital_advice": treatment_analysis.hospital_advice,
+                    "when_to_seek_emergency": treatment_analysis.when_to_seek_emergency
+                },
+                "verification": {
+                    "verification_score": verification.verification_score,
+                    "confidence_level": verification.confidence_level,
+                    "recommended_actions": verification.recommended_actions,
+                    "additional_tests": verification.additional_tests,
+                    "specialist_referral": verification.specialist_referral,
+                    "red_flags": verification.red_flags
+                },
+                "side_effects": {
+                    "common_side_effects": side_effects.common_side_effects,
+                    "rare_side_effects": side_effects.rare_side_effects,
+                    "severe_reactions": side_effects.severe_reactions,
+                    "drug_interactions": side_effects.drug_interactions,
+                    "contraindications": side_effects.contraindications,
+                    "monitoring_parameters": side_effects.monitoring_parameters,
+                    "risk_level": side_effects.risk_level
                 }
             },
             "message": "Comprehensive analysis completed successfully"

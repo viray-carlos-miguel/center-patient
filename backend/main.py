@@ -1,4 +1,8 @@
 ﻿# backend/main.py - UPDATED WITH SINGLE REGISTRATION ENDPOINT
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from fastapi import FastAPI, HTTPException, Request, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -319,6 +323,25 @@ async def init_database():
             admin_notes TEXT,
             verified_at TIMESTAMP NULL,
             verified_by INT REFERENCES users(id),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+        """)
+        
+        # Create prescriptions table
+        await cursor.execute("""
+        CREATE TABLE IF NOT EXISTS prescriptions (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            case_id INT NOT NULL REFERENCES medical_cases(id) ON DELETE CASCADE,
+            patient_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            doctor_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            medication_name VARCHAR(255) NOT NULL,
+            dosage VARCHAR(100) NOT NULL,
+            frequency VARCHAR(100) NOT NULL,
+            duration INT NOT NULL,
+            instructions TEXT,
+            doctor_signature TEXT,
+            is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
@@ -751,6 +774,77 @@ async def login(login_data: UserLogin):
         finally:
             if cursor:
                 await cursor.close()
+                
+# Submit symptoms/case
+@app.post("/api/cases/submit", response_model=Dict[str, Any])
+async def submit_case(request: Request, case_data: Dict[str, Any]):
+    """Submit a new medical case with symptoms and AI assessment"""
+    import json
+    try:
+        pool = await get_connection()
+        
+        async with pool.acquire() as conn:
+            cursor = await conn.cursor()
+            
+            # Get current user from auth header
+            current_user_id = None
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+                try:
+                    if "auth-token-" in token:
+                        token_parts = token.split("-")
+                        if len(token_parts) >= 3:
+                            current_user_id = int(token_parts[2])
+                except:
+                    pass
+            
+            if not current_user_id:
+                # Try to get user from email in request
+                email = case_data.get('patient_email')
+                if email:
+                    await cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+                    user = await cursor.fetchone()
+                    if user:
+                        current_user_id = user[0]
+            
+            if not current_user_id:
+                raise HTTPException(status_code=401, detail="User not authenticated")
+            
+            # Get patient name
+            await cursor.execute("SELECT first_name, last_name FROM users WHERE id = %s", (current_user_id,))
+            patient = await cursor.fetchone()
+            patient_name = f"{patient[0]} {patient[1]}" if patient else "Unknown Patient"
+            
+            # Insert new case
+            await cursor.execute("""
+                INSERT INTO medical_cases (patient_id, symptoms, ai_assessment, status, created_at)
+                VALUES (%s, %s, %s, 'pending_review', %s)
+            """, (
+                current_user_id,
+                json.dumps(case_data.get('symptoms', {})),
+                json.dumps(case_data.get('ai_assessment', {})),
+                datetime.now()
+            ))
+            
+            case_id = cursor.lastrowid
+            
+            await conn.commit()
+            
+            return {
+                "success": True,
+                "case_id": case_id,
+                "message": "Symptoms submitted successfully",
+                "patient_name": patient_name,
+                "status": "pending_review"
+            }
+            
+    except Exception as e:
+        print(f"❌ Error submitting case: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cursor:
+            await cursor.close()
 
 # Get patient cases
 @app.get("/api/patient/cases", response_model=Dict[str, Any])
@@ -945,7 +1039,7 @@ async def get_doctor_cases():
 # Review case
 @app.post("/api/cases/{case_id}/review", response_model=Dict[str, Any])
 async def review_case(case_id: int, review_data: Dict[str, Any]):
-    """Review a medical case"""
+    """Review a medical case and create prescription record"""
     pool = await get_connection()
     
     async with pool.acquire() as conn:
@@ -954,6 +1048,15 @@ async def review_case(case_id: int, review_data: Dict[str, Any]):
         # Extract prescription data if present
         prescription_data = review_data.get("prescription")
         prescription_json = json.dumps(prescription_data) if prescription_data else None
+        
+        # Get case details for prescription record
+        await cursor.execute("SELECT patient_id, symptoms FROM medical_cases WHERE id = %s", (case_id,))
+        case_details = await cursor.fetchone()
+        
+        if not case_details:
+            return {"success": False, "message": "Case not found"}
+        
+        patient_id = case_details[0]
         
         # Update case with review including prescription
         await cursor.execute("""
@@ -967,148 +1070,62 @@ async def review_case(case_id: int, review_data: Dict[str, Any]):
             case_id
         ))
         
-        await cursor.close()
-        
-        return {
-            "success": True,
-            "message": "Case reviewed successfully"
-        }
-
-# Submit symptoms
-@app.post("/api/cases/submit", response_model=Dict[str, Any])
-async def submit_symptoms(symptom_data: Dict[str, Any], request: Request = None):
-    """Submit new symptom case with ML analysis"""
-    pool = await get_connection()
-    
-    async with pool.acquire() as conn:
-        cursor = await conn.cursor()
-        
-        # Extract authenticated user ID from token
-        current_user_id = None
-        if request:
-            auth_header = request.headers.get("authorization", "")
-            token = auth_header.replace("Bearer ", "").strip()
-            if token.startswith("auth-token-"):
-                try:
-                    token_parts = token.split("-")
-                    if len(token_parts) >= 3:
-                        current_user_id = int(token_parts[2])
-                        print(f"🔐 Submit: user ID from token: {current_user_id}")
-                except (ValueError, IndexError):
-                    pass
-        
-        # Perform ML analysis using the trained ML engine
-        ml_input = symptom_data.get("symptoms", {})
-        patient_info = symptom_data.get("patient_info")
-
-        # Allow either a dict payload or a simple list of symptoms
-        if isinstance(ml_input, list):
-            # Convert list of symptoms into a basic description string
-            ml_input = {
-                "description": ", ".join([str(s) for s in ml_input])
-            }
-
-        # Use Gemini AI for accurate analysis first
-        try:
-            from services.gemini_ai import gemini_ai as _gai
-            print(f"🔍 Gemini submit input: {json.dumps(ml_input)[:200]}")
-            gemini_analysis = await _gai.analyze_symptoms_for_disease(ml_input)
-            print(f"✅ Gemini AI analysis: {gemini_analysis.get('primary_prediction', {}).get('condition', 'Unknown')}")
-            
-            # Convert Gemini analysis to expected format
-            ai_assessment = {
-                "predictions": [{
-                    "disease": gemini_analysis.get('primary_prediction', {}).get('condition', 'Unknown'),
-                    "confidence": gemini_analysis.get('primary_prediction', {}).get('confidence', 50.0),
-                    "matching_symptoms": gemini_analysis.get('primary_prediction', {}).get('matching_symptoms', [])
-                }],
-                "risk_assessment": {
-                    "risk_level": gemini_analysis.get('emergency_assessment', {}).get('level', 'medium').lower(),
-                    "risk_score": 5 if gemini_analysis.get('emergency_assessment', {}).get('level') == 'Non-urgent' else 8,
-                    "recommended_action": gemini_analysis.get('emergency_assessment', {}).get('message', 'Consult a doctor'),
-                    "go_to_hospital": gemini_analysis.get('emergency_assessment', {}).get('go_to_hospital', False)
-                },
-                "analysis_method": "gemini-2.5-flash",
-                "gemini_analysis": gemini_analysis  # Keep full analysis for display
-            }
-            
-        except Exception as e:
-            print(f"⚠️ Gemini AI analysis failed: {e}")
-            
-            # Fallback to ML prediction engine if available
-            if ML_ENABLED and ml_engine is not None and ml_engine.is_trained:
-                try:
-                    ai_assessment = ml_engine.predict(ml_input)
-                    print(f"✅ ML prediction fallback: {ai_assessment.get('predictions', [{}])[0].get('disease', 'Unknown')}")
-                except Exception as ml_error:
-                    print(f"⚠️ ML prediction also failed: {ml_error}")
-                    ai_assessment = {
-                        "predictions": [{"disease": "General Assessment", "confidence": 50.0, "matching_symptoms": []}],
-                        "risk_assessment": {"risk_level": "medium", "risk_score": 5, "recommended_action": "Consult a doctor"},
-                        "analysis_method": "fallback",
-                    }
-            else:
-                ai_assessment = {
-                    "predictions": [{"disease": "General Assessment", "confidence": 50.0, "matching_symptoms": []}],
-                    "risk_assessment": {"risk_level": "medium", "risk_score": 5, "recommended_action": "Consult a doctor"},
-                    "analysis_method": "fallback",
-                }
-
-        # Use authenticated user ID if available, otherwise fall back to demo patient
-        patient_id = current_user_id
-        if not patient_id:
-            await cursor.execute("SELECT id FROM users WHERE email = %s", ("demo.patient@gmail.com",))
-            patient = await cursor.fetchone()
-            
-            if not patient:
-                # Create demo patient
-                password_hash = hashlib.sha256("Demo@123".encode()).hexdigest()
-                await cursor.execute("""
-                INSERT INTO users (email, password_hash, role, first_name, last_name, is_active)
-                VALUES (%s, %s, %s, %s, %s, TRUE)
-                """, (
-                    "demo.patient@gmail.com",
-                    password_hash,
-                    "patient",
-                    "Demo",
-                    "Patient"
-                ))
-                patient_id = cursor.lastrowid
-                
-                # Create patient profile
-                await cursor.execute("""
-                INSERT INTO patients (user_id, date_of_birth)
-                VALUES (%s, %s)
-                """, (patient_id, "1990-01-01"))
-            else:
-                patient_id = patient[0]
-        
-        print(f"📝 Saving case for patient_id: {patient_id}")
-        
-        # Insert new case with AI assessment
-        await cursor.execute("""
-        INSERT INTO medical_cases (patient_id, doctor_id, symptoms, ai_assessment, status)
-        VALUES (%s, %s, %s, %s, 'pending_review')
-        """, (
-            patient_id,
-            None,  # No doctor assigned yet
-            json.dumps(symptom_data.get("symptoms", {})),
-            json.dumps(ai_assessment),
-        ))
-        
-        case_id = cursor.lastrowid
+        # Create prescription record if prescription data exists
+        prescription_id = None
+        if prescription_data:
+            await cursor.execute("""
+            INSERT INTO prescriptions (case_id, patient_id, doctor_id, medication_name, dosage, frequency, duration, instructions, doctor_signature, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            """, (
+                case_id,
+                patient_id,
+                review_data.get("doctor_id", 1),  # Get from auth token in real implementation
+                prescription_data.get("medication_name", ""),
+                prescription_data.get("dosage", ""),
+                prescription_data.get("frequency", ""),
+                prescription_data.get("duration", ""),
+                prescription_data.get("instructions", ""),
+                review_data.get("doctor_signature", "")
+            ))
+            prescription_id = cursor.lastrowid
         
         await cursor.close()
         
         return {
             "success": True,
-            "case_id": case_id,
-            "message": "Symptoms submitted successfully",
-            "ai_analysis": ai_assessment,
-            "note": "ML system is active and has analyzed the symptoms"
+            "message": "Case reviewed successfully",
+            "prescription_id": prescription_id,
+            "patient_id": patient_id
         }
+
+# ... (rest of the code remains the same)
 
 # ===== ADMIN MANAGEMENT ENDPOINTS =====
+
+@app.get("/api/admin/clear-database")
+async def clear_database():
+    """Clear all user data from database (for testing)"""
+    try:
+        pool = await get_connection()
+        
+        async with pool.acquire() as conn:
+            cursor = await conn.cursor()
+            
+            # Clear all tables with correct names
+            await cursor.execute("DELETE FROM medical_cases")
+            await cursor.execute("DELETE FROM users")
+            await cursor.execute("ALTER TABLE medical_cases AUTO_INCREMENT = 1")
+            await cursor.execute("ALTER TABLE users AUTO_INCREMENT = 1")
+            
+            await conn.commit()
+            
+        return {"success": True, "message": "Database cleared successfully"}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to clear database: {str(e)}"
+        )
 
 @app.get("/api/admin/health", response_model=Dict[str, Any])
 async def admin_health_check():
