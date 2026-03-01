@@ -59,6 +59,16 @@ except Exception as e:
     ml_engine = None
     print(f"❌ ML System failed: {e}")
 
+# Symptom Predictor (Random Forest + ChatGPT fallback)
+try:
+    from ml.symptom_predictor import predictor as symptom_predictor
+    SYMPTOM_PREDICTOR_ENABLED = symptom_predictor.model is not None
+    print(f"✅ Symptom Predictor loaded (model_ready={SYMPTOM_PREDICTOR_ENABLED})")
+except Exception as e:
+    symptom_predictor = None
+    SYMPTOM_PREDICTOR_ENABLED = False
+    print(f"❌ Symptom Predictor failed: {e}")
+
 # Gemini AI System
 try:
     from api.gemini_api import router as gemini_router
@@ -85,12 +95,24 @@ except Exception as e:
     ml_engine = None
     ml_router = None
 
+# AI Insights (ChatGPT)
+try:
+    from api.ai_insights_api import router as ai_insights_router
+    AI_INSIGHTS_ENABLED = True
+    print("✅ AI Insights (ChatGPT) API routes loaded")
+except Exception as e:
+    ai_insights_router = None
+    AI_INSIGHTS_ENABLED = False
+    print(f"❌ AI Insights API failed: {e}")
+
 # MySQL Database Configuration
 MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
 MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
 MYSQL_USER = os.getenv("MYSQL_USER", "root")
 MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "")
 MYSQL_DATABASE = os.getenv("MYSQL_DATABASE", "medical_center")
+
+ADMIN_BYPASS_ENABLED = os.getenv("ADMIN_BYPASS_ENABLED", "false").strip().lower() == "true"
 
 # Pydantic Models
 class UserBase(BaseModel):
@@ -222,6 +244,11 @@ if MEDICINE_ENABLED:
     app.include_router(medicine_router)
     print("✅ Medicine Recommendation API routes included")
 
+# Include AI Insights router if available
+if AI_INSIGHTS_ENABLED and ai_insights_router is not None:
+    app.include_router(ai_insights_router)
+    print("✅ AI Insights API routes included")
+
 # Database Connection Pool
 pool = None
 
@@ -295,6 +322,11 @@ async def init_database():
         )
         """)
         
+        # Ensure status defaults are enforced (older tables may allow NULL/empty)
+        await cursor.execute(
+            "ALTER TABLE medical_cases MODIFY COLUMN status ENUM('pending_review','in_review','completed') NOT NULL DEFAULT 'pending_review'"
+        )
+        
         # Create patients table
         await cursor.execute("""
         CREATE TABLE IF NOT EXISTS patients (
@@ -332,9 +364,9 @@ async def init_database():
         await cursor.execute("""
         CREATE TABLE IF NOT EXISTS prescriptions (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            case_id INT NOT NULL REFERENCES medical_cases(id) ON DELETE CASCADE,
-            patient_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            doctor_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            case_id INT NOT NULL,
+            patient_id INT NOT NULL,
+            doctor_id INT NOT NULL,
             medication_name VARCHAR(255) NOT NULL,
             dosage VARCHAR(100) NOT NULL,
             frequency VARCHAR(100) NOT NULL,
@@ -346,6 +378,35 @@ async def init_database():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
         """)
+
+        # Lightweight schema repair for prescriptions table (handles older schemas)
+        await cursor.execute("SHOW COLUMNS FROM prescriptions")
+        prescription_columns = {row[0] for row in await cursor.fetchall()}
+        if "duration" not in prescription_columns and "duration_days" in prescription_columns:
+            await cursor.execute("ALTER TABLE prescriptions CHANGE COLUMN duration_days duration INT NOT NULL")
+            prescription_columns.add("duration")
+        if "duration" not in prescription_columns:
+            await cursor.execute("ALTER TABLE prescriptions ADD COLUMN duration INT NOT NULL DEFAULT 0")
+
+        # Normalize medical_cases.status for legacy rows.
+        # Using COALESCE(NULLIF(...)) avoids invalid ENUM writes while still cleaning blanks.
+        await cursor.execute(
+            """
+            UPDATE medical_cases
+            SET status = COALESCE(
+                NULLIF(
+                    CASE
+                        WHEN LOWER(status) IN ('pending', 'pending review', 'pending_review') THEN 'pending_review'
+                        WHEN LOWER(status) IN ('inreview', 'in review', 'in_review') THEN 'in_review'
+                        WHEN LOWER(status) IN ('done', 'complete', 'completed') THEN 'completed'
+                        ELSE status
+                    END,
+                    ''
+                ),
+                'pending_review'
+            )
+            """
+        )
         
         # Check if we need to create initial admin
         await cursor.execute("SELECT COUNT(*) FROM users WHERE email = %s", ("admin@medical.com",))
@@ -461,6 +522,34 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return hash_password(plain_password) == hashed_password
+
+# Token parsing helper
+def _extract_user_id_from_auth_header(auth_header: str | None) -> int | None:
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+
+    token = auth_header.split(" ", 1)[1]
+    try:
+        if token.startswith("auth-token-"):
+            token_parts = token.split("-")
+            if len(token_parts) >= 3:
+                return int(token_parts[2])
+        if token.startswith("admin-bypass-token-"):
+            return 0
+        if token.startswith("demo-token-"):
+            # demo-token-patient / demo-token-doctor / demo-token-admin
+            # These are only for demo mode; caller decides if it wants to accept them.
+            return None
+
+        # Format: {role}_token_{user_id}_{timestamp}
+        if "_token_" in token:
+            token_parts = token.split("_")
+            if len(token_parts) >= 3:
+                return int(token_parts[2])
+    except (ValueError, IndexError):
+        return None
+
+    return None
 
 # API Routes
 @app.get("/")
@@ -670,11 +759,11 @@ async def login(login_data: UserLogin):
     print(f"🔐 LOGIN ATTEMPT")
     print(f"📧 Email: '{login_data.email}'")
     
-    # --- ADMIN BYPASS: admin / admin ---
+    # --- ADMIN BYPASS: admin / admin (disabled by default) ---
     email_trimmed = login_data.email.strip().lower()
     pass_trimmed = login_data.password.strip()
     
-    if (email_trimmed == "admin" and pass_trimmed == "admin") or (email_trimmed == "admin@medical.com" and pass_trimmed == "admin") or (email_trimmed == "admin@medical.com" and pass_trimmed == "admin@123"):
+    if ADMIN_BYPASS_ENABLED and ((email_trimmed == "admin" and pass_trimmed == "admin") or (email_trimmed == "admin@medical.com" and pass_trimmed == "admin") or (email_trimmed == "admin@medical.com" and pass_trimmed == "admin@123")):
         print("🔑 ADMIN BYPASS LOGIN")
         print("=" * 50)
         return {
@@ -749,7 +838,8 @@ async def login(login_data: UserLogin):
         print("=" * 50)
         
         # Prepare user response
-        full_name = f"{user[3]} {user[4]}"  # first_name, last_name
+        # user tuple: (id, email, password_hash, role, first_name, last_name, is_active, created_at, updated_at)
+        full_name = f"{user[4]} {user[5]}"
         if user[3] == 'doctor':
             full_name = f"Dr. {full_name}"
         
@@ -757,11 +847,11 @@ async def login(login_data: UserLogin):
             "id": user[0],
             "email": user[1],
             "role": user[3],
-            "first_name": user[3],
-            "last_name": user[4],
+            "first_name": user[4],
+            "last_name": user[5],
             "full_name": full_name,
-            "is_active": user[5],
-            "created_at": user[6].isoformat() if user[6] and hasattr(user[6], 'isoformat') else str(user[6]) if user[6] else None
+            "is_active": bool(user[6]),
+            "created_at": user[7].isoformat() if user[7] and hasattr(user[7], 'isoformat') else str(user[7]) if user[7] else None
         }
         
         try:
@@ -775,6 +865,29 @@ async def login(login_data: UserLogin):
             if cursor:
                 await cursor.close()
                 
+# ===== SYMPTOM PREDICTION (ML + ChatGPT fallback) =====
+@app.post("/api/predict-symptoms", response_model=Dict[str, Any])
+async def predict_symptoms(request: Request, payload: Dict[str, Any]):
+    """
+    Predict disease from symptoms using Random Forest ML model.
+    Falls back to ChatGPT when ML confidence is low.
+    ChatGPT uses ONLY the symptoms provided — nothing more.
+    """
+    if not SYMPTOM_PREDICTOR_ENABLED or symptom_predictor is None:
+        raise HTTPException(status_code=503, detail="Symptom predictor not available")
+
+    symptoms = payload.get("symptoms", {})
+    description = symptoms.get("description", "") or payload.get("description", "")
+
+    try:
+        result = await symptom_predictor.predict(symptoms, description)
+        return result
+    except Exception as e:
+        print(f"❌ Prediction error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Submit symptoms/case
 @app.post("/api/cases/submit", response_model=Dict[str, Any])
 async def submit_case(request: Request, case_data: Dict[str, Any]):
@@ -789,14 +902,43 @@ async def submit_case(request: Request, case_data: Dict[str, Any]):
             # Get current user from auth header
             current_user_id = None
             auth_header = request.headers.get("Authorization")
+            
             if auth_header and auth_header.startswith("Bearer "):
                 token = auth_header.split(" ")[1]
                 try:
+                    # Handle multiple token formats
                     if "auth-token-" in token:
                         token_parts = token.split("-")
                         if len(token_parts) >= 3:
                             current_user_id = int(token_parts[2])
-                except:
+                    elif "patient_token_" in token:
+                        # Format: patient_token_{user_id}_{timestamp}
+                        token_parts = token.split("_")
+                        if len(token_parts) >= 3:
+                            current_user_id = int(token_parts[2])
+                    elif "doctor_token_" in token:
+                        # Format: doctor_token_{user_id}_{timestamp}
+                        token_parts = token.split("_")
+                        if len(token_parts) >= 3:
+                            current_user_id = int(token_parts[2])
+                    elif "admin_token_" in token:
+                        # Format: admin_token_{user_id}_{timestamp}
+                        token_parts = token.split("_")
+                        if len(token_parts) >= 3:
+                            current_user_id = int(token_parts[2])
+                    elif "demo-token-" in token:
+                        # Demo token format - use demo user ID
+                        if "patient" in token:
+                            current_user_id = 26  # Use the actual patient ID from logs
+                        elif "doctor" in token:
+                            current_user_id = 2
+                        elif "admin" in token:
+                            current_user_id = 0
+                    elif "admin-bypass-token-" in token:
+                        # Admin bypass token
+                        current_user_id = 0
+                except (ValueError, IndexError) as e:
+                    print(f"⚠️ Token parsing error: {e}")
                     pass
             
             if not current_user_id:
@@ -841,6 +983,10 @@ async def submit_case(request: Request, case_data: Dict[str, Any]):
             
     except Exception as e:
         print(f"❌ Error submitting case: {e}")
+        print(f"❌ Error type: {type(e)}")
+        print(f"❌ Error args: {e.args}")
+        import traceback
+        print(f"❌ Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if cursor:
@@ -857,26 +1003,12 @@ async def get_patient_cases(request: Request):
         async with pool.acquire() as conn:
             cursor = await conn.cursor()
             
-            # Get current user from auth header - parse JWT token
-            current_user_id = None
+            # Get current user from auth header
             auth_header = request.headers.get("Authorization")
-            if auth_header and auth_header.startswith("Bearer "):
-                token = auth_header.split(" ")[1]
-                try:
-                    # Simple token parsing for demo (in production, use proper JWT validation)
-                    # Token format: "auth-token-{user_id}-{timestamp}"
-                    if "auth-token-" in token:
-                        token_parts = token.split("-")
-                        if len(token_parts) >= 3:
-                            current_user_id = int(token_parts[2])
-                            print(f"🔐 Extracted user ID from token: {current_user_id}")
-                except (ValueError, IndexError) as e:
-                    print(f"⚠️ Token parsing error: {e}")
-            
-            # Fallback to demo user if no valid token
+            current_user_id = _extract_user_id_from_auth_header(auth_header)
+
             if current_user_id is None:
-                current_user_id = 3  # Demo fallback
-                print(f"⚠️ No valid token found, using demo user ID: {current_user_id}")
+                raise HTTPException(status_code=401, detail="User not authenticated")
             
             # Get cases for current patient only with patient name and prescription
             await cursor.execute("""
@@ -888,6 +1020,7 @@ async def get_patient_cases(request: Request):
             """, (current_user_id,))
             
             cases = await cursor.fetchall()
+            print(f"Fetched {len(cases)} cases for patient ID {current_user_id}")
             
             # Convert to response format
             case_list = []
@@ -1017,6 +1150,19 @@ async def get_doctor_cases():
     async with pool.acquire() as conn:
         cursor = await conn.cursor()
         
+        # First, check all cases and their statuses
+        await cursor.execute("""
+        SELECT c.id, c.status, c.patient_id, u.first_name, u.last_name
+        FROM medical_cases c
+        JOIN users u ON c.patient_id = u.id
+        ORDER BY c.created_at DESC
+        """)
+        
+        all_cases = await cursor.fetchall()
+        print(f"📋 All cases in database: {len(all_cases)}")
+        for case in all_cases:
+            print(f"  Case ID: {case[0]}, Status: {case[1]}, Patient: {case[3]} {case[4]}")
+        
         # Get all cases for doctor review with patient names
         await cursor.execute("""
         SELECT c.id, c.symptoms, c.ai_assessment, c.status, c.created_at, u.first_name, u.last_name
@@ -1027,6 +1173,7 @@ async def get_doctor_cases():
         """)
         
         cases = await cursor.fetchall()
+        print(f"📋 Cases for doctor review: {len(cases)}")
         
         # Convert to response format
         case_list = []
@@ -1092,6 +1239,11 @@ async def review_case(case_id: int, review_data: Dict[str, Any]):
         if prescription_data and prescription_data.get("medicines"):
             medicines = prescription_data.get("medicines", [])
             for medicine in medicines:
+                duration_val = medicine.get("duration_days", 0)
+                try:
+                    duration_val = int(duration_val) if duration_val is not None else 0
+                except (ValueError, TypeError):
+                    duration_val = 0
                 await cursor.execute("""
                 INSERT INTO prescriptions (case_id, patient_id, doctor_id, medication_name, dosage, frequency, duration, instructions, doctor_signature, created_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
@@ -1102,11 +1254,13 @@ async def review_case(case_id: int, review_data: Dict[str, Any]):
                     medicine.get("medication_name", ""),
                     medicine.get("dosage", ""),
                     medicine.get("frequency", ""),
-                    medicine.get("duration_days", ""),
+                    duration_val,
                     medicine.get("instructions", ""),
                     prescription_data.get("doctor_signature", "")
                 ))
                 prescription_ids.append(cursor.lastrowid)
+
+        await conn.commit()
         
         await cursor.close()
         
@@ -1168,6 +1322,28 @@ async def admin_health_check():
             "message": "Admin endpoints error",
             "error": str(e)
         }
+
+@app.get("/api/admin/db/statuses", response_model=Dict[str, Any])
+async def get_case_statuses(request: Request):
+    auth_header = request.headers.get("Authorization")
+    user_id = _extract_user_id_from_auth_header(auth_header)
+    if user_id != 0:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    pool = await get_connection()
+    async with pool.acquire() as conn:
+        cursor = await conn.cursor()
+        await cursor.execute(
+            "SELECT status, COUNT(*) as cnt FROM medical_cases GROUP BY status ORDER BY cnt DESC"
+        )
+        rows = await cursor.fetchall()
+        await cursor.close()
+
+    return {
+        "success": True,
+        "statuses": [{"status": r[0], "count": r[1]} for r in rows],
+        "total_distinct": len(rows),
+    }
 
 @app.post("/api/admin/create-admin", response_model=Dict[str, Any])
 async def create_admin_account(admin_data: Dict[str, Any]):
