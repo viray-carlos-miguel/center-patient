@@ -1,10 +1,14 @@
-# Add these endpoints to backend/main.py after the review_case endpoint
+from fastapi import APIRouter, HTTPException, Request
+from typing import Dict, Any
+
+router = APIRouter()
 
 # Get doctor prescriptions
-@app.get("/api/doctor/prescriptions", response_model=Dict[str, Any])
+@router.get("/api/doctor/prescriptions", response_model=Dict[str, Any])
 async def get_doctor_prescriptions(request: Request):
     """Get prescriptions written by current doctor"""
     import json
+    from main import get_connection
     try:
         pool = await get_connection()
         
@@ -14,21 +18,8 @@ async def get_doctor_prescriptions(request: Request):
             # Get current doctor from auth header
             current_doctor_id = None
             auth_header = request.headers.get("Authorization")
-            if auth_header and auth_header.startswith("Bearer "):
-                token = auth_header.split(" ", 1)[1]
-                try:
-                    if token.startswith("auth-token-"):
-                        token_parts = token.split("-")
-                        if len(token_parts) >= 3:
-                            current_doctor_id = int(token_parts[2])
-                    elif token.startswith("admin-bypass-token-"):
-                        current_doctor_id = 0
-                    elif "_token_" in token:
-                        token_parts = token.split("_")
-                        if len(token_parts) >= 3:
-                            current_doctor_id = int(token_parts[2])
-                except (ValueError, IndexError):
-                    current_doctor_id = None
+            from main import _extract_user_id_from_auth_header
+            current_doctor_id = _extract_user_id_from_auth_header(auth_header)
 
             if current_doctor_id is None:
                 raise HTTPException(status_code=401, detail="User not authenticated")
@@ -77,10 +68,11 @@ async def get_doctor_prescriptions(request: Request):
         return {"success": False, "message": "Failed to get prescriptions"}
 
 # Get patient prescriptions
-@app.get("/api/patient/prescriptions", response_model=Dict[str, Any])
+@router.get("/api/patient/prescriptions", response_model=Dict[str, Any])
 async def get_patient_prescriptions(request: Request):
     """Get prescriptions for current patient"""
     import json
+    from main import get_connection
     try:
         pool = await get_connection()
         
@@ -90,19 +82,8 @@ async def get_patient_prescriptions(request: Request):
             # Get current patient from auth header
             current_patient_id = None
             auth_header = request.headers.get("Authorization")
-            if auth_header and auth_header.startswith("Bearer "):
-                token = auth_header.split(" ", 1)[1]
-                try:
-                    if token.startswith("auth-token-"):
-                        token_parts = token.split("-")
-                        if len(token_parts) >= 3:
-                            current_patient_id = int(token_parts[2])
-                    elif "_token_" in token:
-                        token_parts = token.split("_")
-                        if len(token_parts) >= 3:
-                            current_patient_id = int(token_parts[2])
-                except (ValueError, IndexError):
-                    current_patient_id = None
+            from main import _extract_user_id_from_auth_header
+            current_patient_id = _extract_user_id_from_auth_header(auth_header)
 
             if current_patient_id is None:
                 raise HTTPException(status_code=401, detail="User not authenticated")
@@ -152,9 +133,11 @@ async def get_patient_prescriptions(request: Request):
         return {"success": False, "message": "Failed to get prescriptions"}
 
 # Download prescription as PDF
-@app.get("/api/prescriptions/{prescription_id}/download")
+@router.get("/api/prescriptions/{prescription_id}/download")
 async def download_prescription(prescription_id: int):
     """Generate downloadable prescription PDF"""
+    import json
+    from main import get_connection
     try:
         pool = await get_connection()
         

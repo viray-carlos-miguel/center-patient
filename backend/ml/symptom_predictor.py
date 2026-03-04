@@ -19,7 +19,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(BASE_DIR, "trained_model")
 
 # Confidence threshold: below this → ChatGPT fallback
-CONFIDENCE_THRESHOLD = 0.45
+# Note: model trained on small dataset (1 sample/class) so scores are inherently low
+CONFIDENCE_THRESHOLD = 0.20
 
 # ──────────────────────────────────────────────
 # Mapping: frontend symptom checkbox IDs → CSV column names
@@ -38,6 +39,7 @@ FRONTEND_TO_FEATURE = {
     "generalized_pain": "Pain",
     "excessive_sweating": "ExcessiveSweating",
     # Respiratory
+    "cough": "Cough",
     "cough_dry": "Cough",
     "cough_productive": "ProductiveCough",
     "shortness_of_breath": "ShortnessBreath",

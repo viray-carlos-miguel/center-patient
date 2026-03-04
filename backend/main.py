@@ -244,6 +244,14 @@ if MEDICINE_ENABLED:
     app.include_router(medicine_router)
     print("✅ Medicine Recommendation API routes included")
 
+# Include Prescription endpoints
+try:
+    from prescription_endpoints import router as prescription_router
+    app.include_router(prescription_router)
+    print("✅ Prescription API routes included")
+except Exception as e:
+    print(f"❌ Prescription endpoints failed: {e}")
+
 # Include AI Insights router if available
 if AI_INSIGHTS_ENABLED and ai_insights_router is not None:
     app.include_router(ai_insights_router)
@@ -1163,12 +1171,13 @@ async def get_doctor_cases():
         for case in all_cases:
             print(f"  Case ID: {case[0]}, Status: {case[1]}, Patient: {case[3]} {case[4]}")
         
-        # Get all cases for doctor review with patient names
+        # Get ALL cases (pending, in_review, and completed) with patient names and doctor review fields
         await cursor.execute("""
-        SELECT c.id, c.symptoms, c.ai_assessment, c.status, c.created_at, u.first_name, u.last_name
+        SELECT c.id, c.symptoms, c.ai_assessment, c.status, c.created_at,
+               u.first_name, u.last_name,
+               c.doctor_diagnosis, c.doctor_notes, c.prescription, c.reviewed_at
         FROM medical_cases c
         JOIN users u ON c.patient_id = u.id
-        WHERE c.status IN ('pending_review', 'in_review')
         ORDER BY c.created_at DESC
         """)
         
@@ -1178,9 +1187,9 @@ async def get_doctor_cases():
         # Convert to response format
         case_list = []
         for case in cases:
-            # Generate a title from symptoms
             symptoms_data = json.loads(case[1]) if case[1] else {}
-            title = symptoms_data.get('description', 'Medical Case')[:50] + '...' if len(symptoms_data.get('description', '')) > 50 else symptoms_data.get('description', 'Medical Case')
+            desc = symptoms_data.get('description', 'Medical Case')
+            title = (desc[:50] + '...') if len(desc) > 50 else desc
             
             case_list.append({
                 "id": case[0],
@@ -1189,7 +1198,11 @@ async def get_doctor_cases():
                 "ai_assessment": json.loads(case[2]) if case[2] else {},
                 "status": case[3],
                 "created_at": case[4].isoformat() if case[4] and hasattr(case[4], 'isoformat') else str(case[4]) if case[4] else None,
-                "patient_name": f"{case[5]} {case[6]}"  # first_name, last_name from users table
+                "patient_name": f"{case[5]} {case[6]}",
+                "doctor_diagnosis": case[7],
+                "doctor_notes": case[8],
+                "prescription": json.loads(case[9]) if case[9] else None,
+                "reviewed_at": case[10].isoformat() if case[10] and hasattr(case[10], 'isoformat') else str(case[10]) if case[10] else None,
             })
         
         await cursor.close()

@@ -137,3 +137,69 @@ async def comprehensive_analysis(req: ComprehensiveAnalysisRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI Insights failed: {str(e)}")
+
+
+class SuggestMedicationsRequest(BaseModel):
+    condition: str
+    symptoms: Optional[Dict[str, Any]] = None
+    confidence: Optional[float] = None
+
+
+@router.post("/suggest-medications")
+async def suggest_medications(req: SuggestMedicationsRequest):
+    """ChatGPT-powered medication suggestions for a specific differential diagnosis condition."""
+    model = os.getenv("CHATGPT_MODEL", "gpt-4o")
+
+    symptom_flags = [
+        k.replace("has_", "").replace("_", " ").title()
+        for k, v in (req.symptoms or {}).items()
+        if v and k.startswith("has_")
+    ]
+    symptom_str = ", ".join(symptom_flags) if symptom_flags else "not specified"
+
+    user = (
+        f"A patient has symptoms: {symptom_str}.\n"
+        f"A differential diagnosis of '{req.condition}' is being considered"
+        f"{f' (confidence: {req.confidence:.1f}%)' if req.confidence else ''}.\n\n"
+        "Based STRICTLY on this condition and these symptoms, provide concise medication suggestions.\n"
+        "Return ONLY valid JSON matching this schema:\n"
+        "{\n"
+        "  \"medications\": [\n"
+        "    {\"name\": \"string\", \"dosage\": \"string\", \"purpose\": \"string\"}\n"
+        "  ],\n"
+        "  \"home_care\": \"string\",\n"
+        "  \"hospital_advice\": \"string\",\n"
+        "  \"disclaimer\": \"string\"\n"
+        "}"
+    )
+
+    try:
+        client = _client()
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a clinical support assistant. Provide brief, safe, evidence-based "
+                        "medication suggestions for a differential diagnosis. Use only the given inputs. "
+                        "Return only JSON."
+                    ),
+                },
+                {"role": "user", "content": user},
+            ],
+            temperature=0.3,
+            max_tokens=600,
+            response_format={"type": "json_object"},
+        )
+        data = json.loads(resp.choices[0].message.content)
+        return {
+            "success": True,
+            "condition": req.condition,
+            "medications": data.get("medications", []),
+            "home_care": data.get("home_care", ""),
+            "hospital_advice": data.get("hospital_advice", ""),
+            "disclaimer": data.get("disclaimer", "AI-generated for educational support only."),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Medication suggestion failed: {str(e)}")
