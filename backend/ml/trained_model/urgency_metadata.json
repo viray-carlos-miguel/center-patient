@@ -1,0 +1,27 @@
+{
+  "urgency_levels": [
+    "low",
+    "medium",
+    "high",
+    "critical"
+  ],
+  "n_training_samples": 318,
+  "n_features": 500,
+  "train_accuracy": 0.9937106918238994,
+  "cv_accuracy_mean": 0.7677083333333333,
+  "cv_accuracy_std": 0.0624932284061548,
+  "oob_accuracy": null,
+  "confidence_threshold": 0.7,
+  "model_type": "RandomForestClassifier",
+  "vectorizer_type": "TfidfVectorizer",
+  "ngram_range": [
+    1,
+    2
+  ],
+  "per_class_f1": {
+    "low": 1.0,
+    "medium": 1.0,
+    "high": 0.9872,
+    "critical": 0.9873
+  }
+}

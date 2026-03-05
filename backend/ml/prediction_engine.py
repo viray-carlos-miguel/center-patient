@@ -1,13 +1,12 @@
 """
-Medical ML Prediction Engine
-Ensemble of Random Forest + Gradient Boosting + Logistic Regression
-Trained on symptom-disease dataset based on real medical literature.
+DEPRECATED — Medical ML Prediction Engine (old ensemble model)
+================================================================
+This module is NO LONGER USED. It has been replaced by:
+- ml/urgency_classifier.py  → ML urgency classification (TfidfVectorizer + RandomForest)
+- ml/symptom_predictor.py   → ChatGPT disease prediction + ML urgency
+- services/gemini_ai.py     → Gemini AI disease prediction + ML urgency
 
-Achieves 85-95% accuracy through:
-1. Weighted voting ensemble
-2. Comprehensive feature engineering
-3. Calibrated probability outputs
-4. Cross-validated training
+Kept for reference only. Do not import or use this module.
 """
 
 import os

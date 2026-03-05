@@ -1,0 +1,319 @@
+symptoms,urgency
+"chest pain, shortness of breath, excessive sweating, nausea, dizziness, palpitations, chest tightness, jaw pain",critical
+"sudden confusion, numbness, loss of coordination, severe headache, dizziness, vision changes, slurred speech, facial drooping",critical
+"chest pain, shortness of breath, fatigue, dizziness, palpitations, fainting, rapid heartbeat, leg swelling",critical
+"high fever, severe headache, stiff neck, light sensitivity, confusion, nausea, vomiting, seizures, rash",critical
+"shortness of breath, rash, swelling, dizziness, wheezing, chest tightness, itching, palpitations, throat swelling, hives",critical
+"high fever, shortness of breath, fatigue, nausea, vomiting, dizziness, muscle pain, chills, palpitations, confusion, excessive sweating, low blood pressure, extreme fatigue",critical
+"fatigue, nausea, abdominal pain, vomiting, dizziness, confusion, excessive thirst, frequent urination, fruity breath, loss of appetite, rapid breathing",critical
+"severe shortness of breath, wheezing, chest tightness, cough, chest pain, palpitations, confusion, blue lips, inability to speak full sentences",critical
+"prolonged seizures, loss of consciousness, confusion, tongue biting, involuntary movements, incontinence, cyanosis",critical
+"sudden severe chest pain, severe back pain, shortness of breath, fainting, excessive sweating, weak pulse, tearing sensation",critical
+"chest pain, loss of consciousness, shortness of breath, no pulse, gasping, unresponsive, cyanosis",critical
+"severe abdominal pain, dizziness, fainting, low blood pressure, extreme fatigue, confusion, rapid heartbeat, pale skin, vomiting blood",critical
+"sudden chest pain, shortness of breath, chest tightness, rapid heartbeat, cyanosis, deviated trachea, absent breath sounds",critical
+"severe shortness of breath, chest tightness, confusion, rapid breathing, cyanosis, low oxygen, fever, bilateral crackles",critical
+"sudden severe headache, chest pain, shortness of breath, vision changes, confusion, nosebleed, seizures, extremely high blood pressure",critical
+"crushing chest pain, left arm pain, shortness of breath, profuse sweating, nausea, feeling of impending doom",critical
+"sudden severe headache, worst headache of life, stiff neck, vomiting, confusion, loss of consciousness",critical
+"chest pain, shortness of breath, coughing blood, rapid heartbeat, sudden onset, leg pain, swelling",critical
+"high fever, confusion, rapid heartbeat, low blood pressure, rapid breathing, extreme fatigue, skin mottling",critical
+"severe allergic reaction, throat closing, difficulty breathing, widespread hives, dizziness, rapid pulse, tongue swelling",critical
+"sudden weakness one side, slurred speech, vision loss, severe headache, confusion, difficulty walking, face drooping",critical
+"severe chest pain, tearing sensation radiating to back, shortness of breath, loss of consciousness, weak pulse",critical
+"unresponsive, not breathing, no pulse, blue skin, gasping, cardiac arrest",critical
+"severe shortness of breath, chest pain, confusion, rapid shallow breathing, low oxygen saturation, blue fingertips",critical
+"seizures lasting more than five minutes, loss of consciousness, tongue injury, involuntary movements, confusion after seizure",critical
+"severe abdominal pain, rigid abdomen, vomiting blood, dizziness, rapid heartbeat, low blood pressure, cold clammy skin",critical
+"sudden complete loss of vision, severe headache, nausea, confusion, high blood pressure, seizures",critical
+"severe burns, difficulty breathing, confusion, rapid heartbeat, severe pain, blistering, shock symptoms",critical
+"stab wound, heavy bleeding, shortness of breath, dizziness, loss of consciousness, rapid pulse, pale skin",critical
+"severe head injury, loss of consciousness, confusion, vomiting, unequal pupils, seizures, clear fluid from nose",critical
+"crushing substernal chest pain, radiating to left arm and jaw, diaphoresis, nausea, shortness of breath, palpitations",critical
+"sudden onset face drooping, arm drift, speech changes, time sensitive, worst headache, double vision, balance loss",critical
+"high fever, petechial rash, neck rigidity, photophobia, altered mental status, vomiting, Kernig sign positive",critical
+"wheezing progressing to silent chest, severe respiratory distress, cyanosis, confusion, accessory muscle use, inability to lie flat",critical
+"severe epigastric pain radiating to back, hypotension, tachycardia, abdominal distension, Grey Turner sign, Cullen sign",critical
+"sudden pleuritic chest pain, hemoptysis, tachycardia, hypoxia, unilateral leg swelling, syncope, right heart strain",critical
+"high fever above 103, tachycardia, hypotension, altered consciousness, oliguria, lactic acidosis, coagulopathy",critical
+"thunderclap headache, neck stiffness, photophobia, nausea, vomiting, loss of consciousness, third nerve palsy",critical
+"chest pain at rest, ST elevation, troponin rise, diaphoresis, pallor, shortness of breath, cardiogenic shock",critical
+"severe dyspnea, bilateral crackles, pink frothy sputum, orthopnea, paroxysmal nocturnal dyspnea, jugular venous distension, hypoxemia",critical
+"acute onset severe abdominal pain, board like rigidity, absent bowel sounds, fever, tachycardia, hypotension, peritoneal signs",critical
+"rapid spreading skin necrosis, severe pain out of proportion, fever, crepitus, blistering, septic shock, tissue gas",critical
+"eclamptic seizures, severe hypertension, headache, visual disturbances, epigastric pain, proteinuria, edema in pregnancy",critical
+"severe chest pain, widened mediastinum, blood pressure differential between arms, aortic regurgitation murmur, syncope, tearing pain",critical
+"acute onset stridor, drooling, severe sore throat, high fever, tripod positioning, muffled voice, respiratory distress in child",critical
+"massive hematemesis, melena, hemodynamic instability, tachycardia, hypotension, pallor, altered consciousness, coagulopathy",critical
+"severe hyperkalemia, peaked T waves, widened QRS, bradycardia, muscle weakness, cardiac arrest risk, paresthesias",critical
+"acute severe asthma, silent chest on auscultation, oxygen saturation below 90, altered consciousness, exhaustion, inability to speak",critical
+"sudden severe flank pain, gross hematuria, hypotension, tachycardia, abdominal rigidity, suspected ruptured AAA",critical
+"acute liver failure, jaundice, coagulopathy, encephalopathy, hepatic foetor, ascites, hypoglycemia, cerebral edema",critical
+"malignant hyperthermia, rapidly rising temperature above 104, muscle rigidity, tachycardia, arrhythmia, dark urine, acidosis",critical
+"severe dehydration with shock, sunken eyes, no tears, altered consciousness, tachycardia, delayed capillary refill, anuria",critical
+"bilateral lower extremity weakness, urinary retention, saddle anesthesia, bowel incontinence, severe back pain, cauda equina compression",critical
+"acute compartment syndrome, severe limb pain, pain with passive stretch, tense swelling, paresthesias, pulselessness, paralysis",critical
+"fever, cough, chest pain, shortness of breath, fatigue, muscle pain, chills, productive cough, loss of appetite, high temperature",high
+"fever, nausea, severe abdominal pain, vomiting, fatigue, loss of appetite, abdominal tenderness, rebound pain",high
+"cough, chest pain, shortness of breath, wheezing, chest tightness, palpitations, difficulty speaking, accessory muscle use",high
+"high fever, nausea, vomiting, fatigue, chills, frequent urination, painful urination, flank pain, blood in urine, back pain",high
+"fever, nausea, severe abdominal pain, vomiting, palpitations, loss of appetite, abdominal swelling, epigastric pain radiating to back",high
+"seizures, confusion, loss of consciousness, tongue biting, involuntary movements, light sensitivity, postictal drowsiness",high
+"nausea, abdominal pain, dizziness, palpitations, vaginal bleeding, shoulder pain, fainting, severe pelvic pain",high
+"leg swelling, calf pain, warmth, redness, tenderness, swollen leg, difficulty walking",high
+"severe dizziness, confusion, extreme fatigue, dry mouth, rapid heartbeat, dark urine, sunken eyes, weakness",high
+"fever, severe right upper abdominal pain, nausea, vomiting, jaundice, clay colored stools, Murphy sign positive",high
+"high fever, flank pain, chills, nausea, vomiting, painful urination, frequent urination, costovertebral angle tenderness",high
+"widespread rash, itching, swelling, shortness of breath, wheezing, facial swelling, tongue swelling, difficulty swallowing",high
+"fever, severe lower left abdominal pain, nausea, constipation, bloating, tenderness, change in bowel habits",high
+"severe headache, nausea, vomiting, light sensitivity, dizziness, vision changes, aura, throbbing unilateral pain",high
+"severe flank pain, nausea, vomiting, blood in urine, painful urination, groin pain, restlessness, colicky pain",high
+"high fever, cough, yellow green sputum, shortness of breath, chest pain, fatigue, body aches, loss of appetite",high
+"high fever, shaking chills, productive cough, shortness of breath, rapid breathing, chest pain on inspiration",high
+"severe abdominal pain right lower quadrant, fever, nausea, vomiting, loss of appetite, rebound tenderness",high
+"high fever, back pain, chills, nausea, painful urination, blood in urine, flank tenderness, rigors",high
+"severe asthma attack, wheezing, chest tightness, shortness of breath, difficulty speaking, rapid breathing, anxiety",high
+"high fever, severe sore throat, difficulty swallowing, drooling, neck swelling, muffled voice, trismus",high
+"severe abdominal pain, fever, abdominal rigidity, nausea, vomiting, absent bowel sounds, guarding",high
+"coughing blood, shortness of breath, chest pain, weight loss, night sweats, fever, fatigue",high
+"sudden severe abdominal pain, nausea, vomiting, abdominal distension, unable to pass gas, constipation",high
+"high fever, confusion, headache, neck stiffness, rash, light sensitivity, vomiting, irritability",high
+"severe leg pain, swelling, warmth, redness, calf tenderness, difficulty walking, shortness of breath",high
+"acute testicular pain, swelling, nausea, vomiting, abdominal pain, fever, tenderness",high
+"severe eye pain, sudden vision loss, headache, nausea, vomiting, halos around lights, red eye",high
+"facial droop, arm weakness, speech difficulty, sudden onset, confusion, severe headache, vision changes",high
+"severe allergic reaction, rash spreading rapidly, swelling of face, difficulty breathing, nausea, dizziness",high
+"high fever, productive cough, pleuritic chest pain, shortness of breath, tachypnea, decreased breath sounds, consolidation on exam",high
+"right lower quadrant pain migrating from periumbilical, anorexia, nausea, low grade fever, guarding, positive psoas sign",high
+"unilateral calf swelling, pain, warmth, erythema, positive Homan sign, recent immobilization, shortness of breath on exertion",high
+"high fever, costovertebral angle tenderness, dysuria, urinary frequency, chills, nausea, vomiting, flank pain, bacteriuria",high
+"severe colicky flank pain, hematuria, nausea, vomiting, restlessness, groin radiation, urinary urgency, diaphoresis",high
+"fever, right upper quadrant pain, nausea, positive Murphy sign, elevated white blood cells, vomiting, referred shoulder pain",high
+"acute onset severe epigastric pain, nausea, vomiting, elevated lipase, abdominal tenderness, fever, tachycardia",high
+"high fever, severe pharyngitis, tonsillar exudate, cervical lymphadenopathy, odynophagia, trismus, uvular deviation peritonsillar abscess",high
+"displaced fracture, severe pain, deformity, swelling, inability to bear weight, crepitus, neurovascular compromise",high
+"acute severe lower left abdominal pain, fever, change in bowel habits, localized peritoneal signs, elevated inflammatory markers",high
+"severe dehydration, oliguria, tachycardia, postural hypotension, dry mucous membranes, confusion, weight loss, dark concentrated urine",high
+"large abscess, fever, fluctuance, severe pain, surrounding cellulitis, systemic symptoms, lymphangitis",high
+"diabetic foot ulcer with fever, purulent drainage, surrounding erythema, deep tissue involvement, elevated glucose, bone exposure",high
+"severe vertigo, nystagmus, nausea, vomiting, inability to walk, acute onset, hearing loss, tinnitus",high
+"acute urinary retention, suprapubic pain, inability to void, distended bladder, overflow incontinence, history of BPH",high
+"severe rectal bleeding, hemodynamic changes, dizziness, tachycardia, pallor, syncope, ongoing bright red blood",high
+"fever, productive cough, night sweats, weight loss, hemoptysis, lymphadenopathy, suspected tuberculosis",high
+"acute gout flare, severe joint pain, swelling, redness, warmth, inability to bear weight, fever, elevated uric acid",high
+"severe lower back pain, radiating leg pain, foot drop, progressive weakness, numbness, bowel bladder changes",high
+"open fracture, bone visible, severe pain, bleeding, contamination risk, deformity, neurovascular assessment needed",high
+"acute cholangitis, fever, jaundice, right upper quadrant pain, rigors, hypotension, confusion, Charcot triad Reynolds pentad",high
+"severe epistaxis, continuous heavy nosebleed, dizziness, tachycardia, pallor, difficulty breathing, swallowing blood",high
+"acute limb ischemia, sudden cold pale limb, absent pulse, severe pain, paresthesias, paralysis, mottling",high
+"severe hyponatremia, confusion, headache, nausea, vomiting, seizure risk, lethargy, muscle cramps, weakness",high
+"threatened miscarriage, vaginal bleeding in pregnancy, cramping, pelvic pain, cervical changes, anxiety, back pain",high
+"acute pericarditis, sharp chest pain worse with inspiration, fever, pericardial friction rub, diffuse ST elevation, pleuritic quality",high
+"fever, cough, chest pain, shortness of breath, fatigue, sore throat, wheezing, chest tightness, productive cough, yellow sputum",medium
+"fever, fatigue, abdominal pain, frequent urination, painful urination, urgency, blood in urine, cloudy urine, pelvic pressure",medium
+"headache, nausea, vomiting, dizziness, light sensitivity, sound sensitivity, throbbing pain",medium
+"fever, fatigue, nausea, abdominal pain, vomiting, diarrhea, muscle pain, loss of appetite, cramping",medium
+"fever, headache, fatigue, rash, pain, itching, blisters, burning sensation, dermatomal distribution",medium
+"fever, fatigue, rash, chills, pain, skin redness, swelling, warmth, streaking, tenderness",medium
+"fever, cough, headache, fatigue, sore throat, runny nose, nasal congestion, facial pain, swelling, postnasal drip",medium
+"fever, ear pain, headache, hearing changes, dizziness, fluid drainage, pressure sensation",medium
+"fever, sore throat, headache, swollen lymph nodes, painful swallowing, white patches on tonsils, body aches",medium
+"cough, wheezing, chest tightness, shortness of breath, nocturnal symptoms, exercise intolerance",medium
+"fatigue, dizziness, shortness of breath, pale skin, weakness, rapid heartbeat, cold hands, brittle nails",medium
+"palpitations, shortness of breath, chest tightness, dizziness, sweating, trembling, fear, nausea",medium
+"abdominal pain, nausea, bloating, heartburn, loss of appetite, gnawing pain, early satiety",medium
+"rash, swelling, warmth, pain, fever, tenderness, wound drainage, expanding redness",medium
+"rash, itching, swelling, sneezing, watery eyes, nasal congestion, hives, mild wheezing",medium
+"fever, cough, sore throat, body aches, headache, fatigue, runny nose, chills, muscle pain",medium
+"persistent cough, mild fever, fatigue, sore throat, nasal congestion, body aches, headache, sneezing",medium
+"fever, painful urination, frequent urination, lower abdominal pain, cloudy urine, urgency, discomfort",medium
+"fever, diarrhea, abdominal cramping, nausea, vomiting, loss of appetite, dehydration, body aches",medium
+"moderate headache, nausea, light sensitivity, dizziness, fatigue, difficulty concentrating, throbbing pain",medium
+"fever, rash, blisters, itching, burning pain, fatigue, headache, localized tingling",medium
+"sore throat, fever, painful swallowing, headache, body aches, swollen glands, fatigue",medium
+"ear pain, fever, hearing loss, dizziness, fluid sensation, headache, jaw pain",medium
+"cough, wheezing, shortness of breath, chest tightness, mucus production, fatigue, exercise difficulty",medium
+"joint pain, swelling, stiffness, fever, fatigue, reduced range of motion, warmth in joints",medium
+"abdominal pain, fever, diarrhea, nausea, bloating, cramping, loss of appetite, mild dehydration",medium
+"persistent cough, chest discomfort, fatigue, mild shortness of breath, sore throat, nasal drip",medium
+"skin infection, fever, redness, swelling, warmth, pain, pus drainage, tenderness",medium
+"fever, fatigue, body aches, sore throat, cough, nasal congestion, headache, chills, muscle soreness",medium
+"urinary frequency, burning sensation, abdominal discomfort, mild fever, cloudy urine, urgency",medium
+"dysuria, urinary frequency, suprapubic tenderness, cloudy urine, urgency, mild hematuria, pelvic discomfort",medium
+"productive cough, low grade fever, chest discomfort, fatigue, sore throat, wheezing, malaise, myalgia",medium
+"acute sinusitis, facial pressure, purulent nasal discharge, fever, headache, maxillary tooth pain, postnasal drip, cough",medium
+"fever, sore throat, tonsillar exudate, anterior cervical lymphadenopathy, painful swallowing, headache, no cough",medium
+"acute otitis media, ear pain, fever, hearing reduction, irritability, pulling at ear, fluid behind eardrum",medium
+"fever, myalgia, headache, dry cough, sore throat, fatigue, rhinorrhea, chills, body aches, malaise influenza",medium
+"vesicular rash in dermatomal pattern, burning pain, itching, fever, fatigue, headache, allodynia shingles",medium
+"spreading erythema, warmth, tenderness, fever, lymphangitis, swelling, skin breakdown cellulitis",medium
+"iron deficiency, fatigue, exertional dyspnea, pallor, tachycardia, pica, glossitis, koilonychia, weakness",medium
+"panic attack, palpitations, chest tightness, dizziness, trembling, shortness of breath, derealization, fear of dying",medium
+"epigastric pain, nausea, early satiety, bloating, heartburn, belching, loss of appetite, pain relieved by antacids",medium
+"acute conjunctivitis, eye redness, purulent discharge, tearing, crusting, eyelid swelling, foreign body sensation",medium
+"fever, fatigue, pharyngitis, posterior cervical lymphadenopathy, splenomegaly, palatal petechiae mononucleosis",medium
+"localized cellulitis, erythema, warmth, pain, swelling, no systemic symptoms, intact skin margins",medium
+"moderate allergic reaction, urticaria, itching, mild facial swelling, no respiratory distress, no anaphylaxis",medium
+"fever, watery diarrhea, abdominal cramps, nausea, mild dehydration, headache, myalgia, viral gastroenteritis",medium
+"moderate gout flare, joint redness, swelling, tenderness, warmth, pain with movement, no systemic signs",medium
+"hemorrhoids, rectal pain, bright red blood on tissue, itching, swelling, discomfort sitting, no significant bleeding",medium
+"carpal tunnel syndrome, hand numbness, tingling, weakness, nocturnal paresthesias, thenar wasting, grip difficulty",medium
+"plantar fasciitis, heel pain worse in morning, pain with first steps, tenderness at medial calcaneal tubercle",medium
+"recurrent urinary tract infection, dysuria, frequency, urgency, suprapubic discomfort, previous UTI history",medium
+"moderate eczema flare, erythematous patches, pruritus, vesicles, weeping, crusting, sleep disruption from itching",medium
+"acute bronchitis, persistent cough, chest soreness, low grade fever, fatigue, sputum production, wheezing",medium
+"moderate back pain with sciatica, radiating leg pain, numbness, tingling, difficulty sitting, positive straight leg raise",medium
+"oral thrush, white patches on tongue, painful eating, altered taste, dry mouth, angular cheilitis, immunocompromised",medium
+"mild pneumonia, cough, low grade fever, fatigue, mild shortness of breath, decreased breath sounds, manageable symptoms",medium
+"mild fever, cough, headache, fatigue, sore throat, runny nose, sneezing, body aches",low
+"sore throat, runny nose, sneezing, itchy eyes, watery eyes, nasal congestion, postnasal drip",low
+"muscle pain, stiffness, limited movement, muscle weakness, soreness, tenderness, mild swelling",low
+"mild headache, neck tension, pressure sensation, bilateral pain, band like tightness",low
+"mild fatigue, palpitations, restlessness, sleep disturbances, mild worry, muscle tension",low
+"mild chest discomfort, nausea, heartburn, regurgitation, difficulty swallowing, sour taste, bloating after meals",low
+"mild rash, itching, skin dryness, flaking, redness, minor irritation",low
+"pimples, blackheads, whiteheads, oily skin, mild redness, comedones",low
+"dry skin, itching, skin flaking, rough skin, tightness, cracking, mild redness",low
+"mild abdominal discomfort, constipation, bloating, straining, hard stools, incomplete evacuation",low
+"mild fatigue, sleepiness, low energy, difficulty concentrating, mild weakness",low
+"minor pain, bruising, mild swelling, tenderness, skin discoloration",low
+"scalp itching, flaking scalp, dry scalp, white flakes, mild redness",low
+"mild itching, mild swelling, redness, small bump, minor irritation, localized reaction",low
+"occasional sneezing, mild runny nose, itchy eyes, mild nasal congestion, seasonal pattern, watery eyes",low
+"runny nose, sneezing, mild cough, mild fatigue, mild sore throat, slight congestion",low
+"mild muscle soreness, stiffness after exercise, slight discomfort, tenderness, no swelling",low
+"mild headache, fatigue, eye strain, slight neck stiffness, tension, mild pressure",low
+"occasional heartburn, mild bloating, discomfort after eating, sour taste, mild nausea",low
+"mild skin irritation, dryness, slight itching, redness, minor peeling",low
+"stuffy nose, mild sore throat, occasional cough, mild body aches, slight fatigue",low
+"minor joint stiffness, mild discomfort, morning stiffness that resolves quickly, mild ache",low
+"mild anxiety, restlessness, difficulty sleeping, mild tension, worry, slight fatigue",low
+"minor stomach discomfort, mild bloating, occasional gas, slight cramping, indigestion",low
+"mild back pain, muscle tension, slight stiffness, discomfort with movement, minor soreness",low
+"mild allergies, occasional sneezing, watery eyes, runny nose, mild itchiness, no fever",low
+"minor scrape, small bruise, mild tenderness, slight redness, minor swelling",low
+"dry eyes, mild eye irritation, slight blurriness, eye fatigue, screen strain",low
+"mild cough, slight throat irritation, no fever, mild fatigue, occasional clearing",low
+"minor insect bite, small bump, mild itching, slight redness, localized irritation",low
+"common cold, mild nasal congestion, clear rhinorrhea, sneezing, mild fatigue, scratchy throat, no fever",low
+"seasonal allergic rhinitis, sneezing, itchy watery eyes, nasal congestion, clear discharge, palatal itching, no fever",low
+"tension type headache, bilateral tightness, mild to moderate intensity, no nausea, no photophobia, stress related",low
+"mild GERD, occasional heartburn after meals, regurgitation, mild bloating, no dysphagia, no weight loss",low
+"mild muscle strain, localized soreness, stiffness, pain with movement, no bruising, no significant swelling",low
+"mild acne vulgaris, few comedones, occasional papules, oily skin, no scarring, no cystic lesions",low
+"xerosis, dry skin, mild pruritus, fine scaling, no erythema, winter exacerbation, no cracking",low
+"functional constipation, infrequent stools, mild straining, bloating, no blood, no weight loss, diet related",low
+"mild contusion, small bruise, localized tenderness, no significant swelling, no fracture signs, resolving",low
+"seborrheic dermatitis, scalp flaking, mild itching, greasy scales, eyebrow involvement, mild erythema",low
+"minor insect bite reaction, localized papule, mild pruritus, slight erythema, no systemic reaction, self limiting",low
+"generalized anxiety symptoms, mild worry, muscle tension, restlessness, difficulty concentrating, sleep onset difficulty",low
+"digital eye strain, dry eyes, blurred near vision, mild headache, neck tension, screen use related",low
+"mild lumbar strain, dull ache, stiffness after sitting, pain with bending, no radiation, no numbness",low
+"hay fever, intermittent sneezing, clear nasal discharge, eye watering, mild congestion, seasonal pattern, outdoor trigger",low
+"mild viral pharyngitis, scratchy throat, mild pain swallowing, no fever, no exudate, mild congestion, self limiting",low
+"tinea pedis, mild foot itching, scaling between toes, slight redness, no blistering, no pain",low
+"mild contact dermatitis, localized rash, itching, redness after exposure, no blistering, self limiting",low
+"mild dyspepsia, upper abdominal discomfort, postprandial fullness, early satiety, mild nausea, no vomiting, no weight loss",low
+"mild lateral epicondylitis, elbow tenderness, pain with gripping, mild weakness, no swelling, activity related",low
+"benign positional vertigo, brief spinning with head movement, no hearing loss, no tinnitus, mild nausea, self resolving",low
+"mild hemorrhoids, occasional bright blood on tissue, mild itching, no pain, no prolapse, intermittent symptoms",low
+"mild carpal tunnel, occasional hand tingling, nocturnal paresthesias, mild grip difficulty, no wasting, intermittent",low
+"mild iron deficiency, mild fatigue, no shortness of breath, pallor, slightly low hemoglobin, dietary cause",low
+"mild dental sensitivity, transient pain with hot cold, no spontaneous pain, no swelling, localized to one tooth",low
+"mild bursitis, localized joint tenderness, mild swelling, pain with pressure, no redness, no fever, activity related",low
+"chronic mild tinnitus, intermittent ringing, no hearing loss, no dizziness, no pain, managed with masking",low
+"mild viral conjunctivitis, eye redness, watery discharge, mild irritation, no vision changes, no pain, self limiting",low
+"mild plantar wart, small painless growth, rough surface, no bleeding, cosmetic concern, single lesion",low
+"mild motion sickness, nausea during travel, mild dizziness, no vomiting, resolves after stopping, cold sweat",low
+"seizures",critical
+"loss of consciousness",critical
+"vomiting blood",critical
+"coughing blood",critical
+"chest pain and shortness of breath",critical
+"severe chest pain",critical
+"unresponsive",critical
+"not breathing",critical
+"severe difficulty breathing",critical
+"crushing chest pain",critical
+"sudden slurred speech",critical
+"sudden facial drooping",critical
+"sudden numbness one side of body",critical
+"no pulse",critical
+"blue lips and confusion",critical
+"seizures and loss of consciousness",critical
+"vomiting blood and dizziness",critical
+"sudden severe headache and confusion",critical
+"chest pain and jaw pain and sweating",critical
+"severe shortness of breath and confusion",critical
+"severe abdominal pain and vomiting blood",critical
+"loss of consciousness and no breathing",critical
+"high fever and confusion and stiff neck",critical
+"chest pain and left arm numbness",critical
+"severe bleeding",high
+"high fever and chills",high
+"severe abdominal pain",high
+"blood in urine",high
+"severe shortness of breath",high
+"difficulty breathing",high
+"coughing up blood",high
+"severe chest pain at rest",high
+"severe headache and vomiting",high
+"high fever and severe sore throat",high
+"severe flank pain",high
+"sudden vision loss",high
+"severe allergic reaction",high
+"severe abdominal pain and fever",high
+"high fever and painful urination",high
+"severe dizziness and fainting",high
+"difficulty swallowing and drooling",high
+"high fever and rash and neck stiffness",high
+"severe leg pain and swelling",high
+"blood in stool and dizziness",high
+"fever and productive cough and chest pain",high
+"severe eye pain and vision changes",high
+"high fever and confusion",high
+"fever",medium
+"headache",medium
+"cough and fever",medium
+"sore throat and fever",medium
+"painful urination",medium
+"ear pain and fever",medium
+"rash and fever",medium
+"persistent cough",medium
+"joint pain and swelling",medium
+"abdominal pain and diarrhea",medium
+"nausea and vomiting and fever",medium
+"wheezing and cough",medium
+"fever and body aches",medium
+"headache and nausea",medium
+"swollen lymph nodes and sore throat",medium
+"fever and diarrhea",medium
+"eye redness and discharge",medium
+"fever and fatigue and body aches",medium
+"chest tightness and wheezing",medium
+"back pain and numbness",medium
+"mild headache",low
+"mild cough",low
+"runny nose",low
+"sneezing",low
+"mild fatigue",low
+"mild sore throat",low
+"mild itching",low
+"mild rash",low
+"mild muscle soreness",low
+"mild bloating",low
+"occasional heartburn",low
+"dry skin",low
+"mild nasal congestion",low
+"mild back pain",low
+"eye strain",low
+"runny nose and sneezing",low
+"mild headache and fatigue",low
+"mild sore throat and runny nose",low
+"mild cough and congestion",low
+"mild itching and dry skin",low
+"mild muscle pain and stiffness",low
+"mild bloating and gas",low
+"mild anxiety and restlessness",low
+"occasional sneezing and watery eyes",low
+"mild nausea after eating",low

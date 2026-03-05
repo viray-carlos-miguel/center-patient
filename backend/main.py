@@ -20,50 +20,15 @@ import hashlib
 # Import email service
 from email_service import email_service
 
-# ML analysis only; Gemini disabled
+# ML Urgency Classifier + ChatGPT disease prediction
 
 load_dotenv()
 
-# AI System Removed - Using ML and Rule-based Only
-AI_ENABLED = False
-predictor = None
-print("⚠️ AI System removed - Using ML and Rule-based analysis")
-
-# Fallback to simple predictor
-class SimplePredictor:
-    def analyze_symptoms(self, symptoms, patient_info):
-        return {
-            "disease_predictions": [{
-                "disease": "Common Cold",
-                "confidence": 65.5,
-                "matching_symptoms": [],
-                "urgency": "low"
-            }],
-            "risk_assessment": {
-                "risk_score": 1,
-                "urgency_level": "low",
-                "recommended_action": "Rest and monitor"
-            },
-            "confidence_score": 0.65,
-            "educational_notes": "AI analysis for educational purposes only"
-        }
-predictor = SimplePredictor()
-
-# ML Prediction System
-try:
-    from ml.api import router as ml_router, engine as ml_engine
-    ML_ENABLED = ml_engine.is_trained
-    print(f"✅ ML System loaded (trained={ML_ENABLED}, accuracy={ml_engine.accuracy:.2%})")
-except Exception as e:
-    ML_ENABLED = False
-    ml_engine = None
-    print(f"❌ ML System failed: {e}")
-
-# Symptom Predictor (Random Forest + ChatGPT fallback)
+# Symptom Predictor v2 (ML UrgencyClassifier + ChatGPT for disease)
 try:
     from ml.symptom_predictor import predictor as symptom_predictor
     SYMPTOM_PREDICTOR_ENABLED = symptom_predictor.model is not None
-    print(f"✅ Symptom Predictor loaded (model_ready={SYMPTOM_PREDICTOR_ENABLED})")
+    print(f"✅ Symptom Predictor v2 loaded (ready={SYMPTOM_PREDICTOR_ENABLED})")
 except Exception as e:
     symptom_predictor = None
     SYMPTOM_PREDICTOR_ENABLED = False
@@ -91,9 +56,6 @@ except Exception as e:
     MEDICINE_ENABLED = False
     medicine_engine = None
     print(f"❌ Medicine System failed: {e}")
-    ML_ENABLED = False
-    ml_engine = None
-    ml_router = None
 
 # AI Insights (ChatGPT)
 try:
@@ -228,11 +190,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
-
-# Include ML router if available
-if ml_router is not None:
-    app.include_router(ml_router)
-    print("✅ ML API routes included")
 
 # Include Gemini AI router if available
 if GEMINI_ENABLED:
@@ -877,9 +834,8 @@ async def login(login_data: UserLogin):
 @app.post("/api/predict-symptoms", response_model=Dict[str, Any])
 async def predict_symptoms(request: Request, payload: Dict[str, Any]):
     """
-    Predict disease from symptoms using Random Forest ML model.
-    Falls back to ChatGPT when ML confidence is low.
-    ChatGPT uses ONLY the symptoms provided — nothing more.
+    Predict urgency (ML UrgencyClassifier) + disease (ChatGPT).
+    No old RF model or rule-based logic — everything is ML + AI.
     """
     if not SYMPTOM_PREDICTOR_ENABLED or symptom_predictor is None:
         raise HTTPException(status_code=503, detail="Symptom predictor not available")
@@ -1473,7 +1429,6 @@ async def get_doctors_for_verification():
             })
         
         return {
-            "success": True,
             "doctors": doctor_list,
             "total": len(doctor_list)
         }
@@ -1481,6 +1436,7 @@ async def get_doctors_for_verification():
 @app.post("/api/admin/doctors/{doctor_id}/verify", response_model=Dict[str, Any])
 async def verify_doctor(doctor_id: int, verification_data: Dict[str, Any]):
     """Verify or reject a doctor's credentials"""
+    print(f"🛂 verify_doctor called for doctor_id={doctor_id} payload_keys={list(verification_data.keys())}")
     pool = await get_connection()
     
     async with pool.acquire() as conn:
@@ -1517,6 +1473,8 @@ async def verify_doctor(doctor_id: int, verification_data: Dict[str, Any]):
             admin_notes
         ))
         
+        email_sent = False
+
         # If verified, activate the user account
         if is_verified:
             await cursor.execute("UPDATE users SET is_active = TRUE WHERE id = %s", (doctor_id,))
@@ -1542,7 +1500,7 @@ async def verify_doctor(doctor_id: int, verification_data: Dict[str, Any]):
             "message": f"Doctor {action} successfully",
             "doctor_id": doctor_id,
             "is_verified": is_verified,
-            "email_sent": is_verified  # Only true if verified and email was sent
+            "email_sent": email_sent
         }
 
 @app.post("/api/admin/users/{user_id}/toggle-status", response_model=Dict[str, Any])

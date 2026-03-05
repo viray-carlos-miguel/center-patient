@@ -18,6 +18,7 @@ class EmailService:
         self.smtp_port = 587
         self.sender_email = os.getenv("GMAIL_EMAIL", "medical.center.pro.demo@gmail.com")
         self.sender_password = os.getenv("GMAIL_APP_PASSWORD", "your-app-password-here")
+        self.smtp_debug = os.getenv("SMTP_DEBUG", "false").strip().lower() == "true"
         
         print(f"📧 Email service initialized with: {self.sender_email}")
         print(f"🔑 Password configured: {'Yes' if self.sender_password != 'your-app-password-here' else 'No'}")
@@ -65,13 +66,16 @@ class EmailService:
         
         try:
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+                if self.smtp_debug:
+                    server.set_debuglevel(1)
                 server.starttls()
                 server.login(self.sender_email, self.sender_password)
                 text = message.as_string()
                 server.sendmail(self.sender_email, message["To"], text)
                 print(f"✅ Email sent via SMTP to {message['To']}")
         except Exception as e:
-            print(f"❌ SMTP Error: {e}")
+            print(f"❌ SMTP Error: {e!r}")
+            print("ℹ️ Gmail SMTP tips: verify App Password is correct, 2-Step Verification is enabled, and check Google Account security alerts/unlock captcha.")
             raise e
     
     def get_doctor_approval_template(self, doctor_name: str, doctor_email: str) -> tuple[str, str, str]:
