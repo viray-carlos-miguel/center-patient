@@ -97,8 +97,11 @@ class Registration(BaseModel):
     password: str
     date_of_birth: Optional[str] = None
     phone: Optional[str] = None
+    address: Optional[str] = None
+    sex: Optional[str] = None
     medical_license: Optional[str] = None
     specialization: Optional[str] = None
+    ptr_number: Optional[str] = None
     agree_to_terms: bool
     acknowledge_educational: bool
 
@@ -259,12 +262,24 @@ async def init_database():
             role ENUM('patient', 'doctor', 'admin') NOT NULL,
             first_name VARCHAR(100) NOT NULL,
             last_name VARCHAR(100) NOT NULL,
+            address VARCHAR(500) NULL,
+            sex ENUM('male','female','other') NULL,
             is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
         """)
         
+        # --- Migrate users table: add address + sex if missing ---
+        try:
+            await cursor.execute("ALTER TABLE users ADD COLUMN address VARCHAR(500) NULL")
+        except Exception:
+            pass
+        try:
+            await cursor.execute("ALTER TABLE users ADD COLUMN sex ENUM('male','female','other') NULL")
+        except Exception:
+            pass
+
         # Create medical_cases table
         await cursor.execute("""
         CREATE TABLE IF NOT EXISTS medical_cases (
@@ -299,6 +314,7 @@ async def init_database():
             user_id INT UNIQUE REFERENCES users(id) ON DELETE CASCADE,
             date_of_birth DATE,
             phone VARCHAR(50),
+            address VARCHAR(500) NULL,
             emergency_contact VARCHAR(100),
             blood_type VARCHAR(10),
             allergies TEXT,
@@ -307,6 +323,12 @@ async def init_database():
         )
         """)
         
+        # --- Migrate patients table: add address if missing ---
+        try:
+            await cursor.execute("ALTER TABLE patients ADD COLUMN address VARCHAR(500) NULL")
+        except Exception:
+            pass
+
         # Create doctors table
         await cursor.execute("""
         CREATE TABLE IF NOT EXISTS doctors (
@@ -314,6 +336,7 @@ async def init_database():
             user_id INT UNIQUE REFERENCES users(id) ON DELETE CASCADE,
             medical_license VARCHAR(100) UNIQUE NOT NULL,
             specialization VARCHAR(100) NOT NULL,
+            ptr_number VARCHAR(100) NULL,
             years_of_experience INT DEFAULT 0,
             is_available BOOLEAN DEFAULT TRUE,
             is_verified BOOLEAN DEFAULT FALSE,
@@ -325,6 +348,12 @@ async def init_database():
         )
         """)
         
+        # --- Migrate doctors table: add ptr_number if missing ---
+        try:
+            await cursor.execute("ALTER TABLE doctors ADD COLUMN ptr_number VARCHAR(100) NULL")
+        except Exception:
+            pass
+
         # Create prescriptions table
         await cursor.execute("""
         CREATE TABLE IF NOT EXISTS prescriptions (
@@ -576,15 +605,17 @@ async def register_user(registration: Registration):
             # Insert new user with auto-detected role
             await cursor.execute("""
             INSERT INTO users (
-                email, password_hash, role, first_name, last_name, 
-                is_active, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                email, password_hash, role, first_name, last_name,
+                address, sex, is_active, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
             """, (
-                registration.email, 
-                password_hash, 
+                registration.email,
+                password_hash,
                 role,
                 registration.first_name.strip(),
                 registration.last_name.strip(),
+                registration.address.strip() if registration.address else None,
+                registration.sex or None,
                 is_active
             ))
             
@@ -612,9 +643,9 @@ async def register_user(registration: Registration):
                 
                 # Create doctor profile
                 await cursor.execute("""
-                INSERT INTO doctors (user_id, medical_license, specialization)
-                VALUES (%s, %s, %s)
-                """, (result[0], registration.medical_license.strip(), registration.specialization.strip()))
+                INSERT INTO doctors (user_id, medical_license, specialization, ptr_number)
+                VALUES (%s, %s, %s, %s)
+                """, (result[0], registration.medical_license.strip(), registration.specialization.strip(), registration.ptr_number.strip() if registration.ptr_number else None))
                 
                 print(f"✅ Doctor profile created for {registration.email}")
             else:
@@ -636,9 +667,9 @@ async def register_user(registration: Registration):
                 
                 # Create patient profile
                 await cursor.execute("""
-                INSERT INTO patients (user_id, date_of_birth, phone)
-                VALUES (%s, %s, %s)
-                """, (result[0], dob_date, registration.phone or None))
+                INSERT INTO patients (user_id, date_of_birth, phone, address)
+                VALUES (%s, %s, %s, %s)
+                """, (result[0], dob_date, registration.phone or None, registration.address.strip() if registration.address else None))
                 
                 print(f"✅ Patient profile created for {registration.email}")
         
@@ -974,11 +1005,19 @@ async def get_patient_cases(request: Request):
             if current_user_id is None:
                 raise HTTPException(status_code=401, detail="User not authenticated")
             
-            # Get cases for current patient only with patient name and prescription
+            # Get cases for current patient with full patient + doctor info
             await cursor.execute("""
-            SELECT c.id, c.symptoms, c.ai_assessment, c.status, c.created_at, c.doctor_diagnosis, c.doctor_notes, c.prescription, c.reviewed_at, u.first_name, u.last_name
+            SELECT c.id, c.symptoms, c.ai_assessment, c.status, c.created_at,
+                   c.doctor_diagnosis, c.doctor_notes, c.prescription, c.reviewed_at,
+                   u.first_name, u.last_name, u.address, u.sex,
+                   p.date_of_birth,
+                   du.first_name, du.last_name,
+                   d.medical_license, d.ptr_number
             FROM medical_cases c
             JOIN users u ON c.patient_id = u.id
+            LEFT JOIN patients p ON p.user_id = u.id
+            LEFT JOIN users du ON c.doctor_id = du.id
+            LEFT JOIN doctors d ON d.user_id = du.id
             WHERE c.patient_id = %s
             ORDER BY c.created_at DESC
             """, (current_user_id,))
@@ -1010,6 +1049,19 @@ async def get_patient_cases(request: Request):
                         # Add signature to prescription data
                         prescription_data['doctor_signature'] = signature_result[0]
                 
+                # Calculate age from date_of_birth
+                dob = case[13]
+                age_str = ''
+                if dob:
+                    from datetime import date as date_type
+                    today = date_type.today()
+                    dob_d = dob if isinstance(dob, date_type) else datetime.strptime(str(dob), '%Y-%m-%d').date()
+                    age_str = str(today.year - dob_d.year - ((today.month, today.day) < (dob_d.month, dob_d.day)))
+
+                doctor_first = case[14] or ''
+                doctor_last = case[15] or ''
+                doctor_name = f"Dr. {doctor_first} {doctor_last}".strip() if doctor_first or doctor_last else ''
+
                 case_list.append({
                     "id": case[0],
                     "title": title,
@@ -1022,7 +1074,13 @@ async def get_patient_cases(request: Request):
                     "prescription": prescription_data,
                     "reviewed_at": case[8].isoformat() if case[8] and hasattr(case[8], 'isoformat') else str(case[8]) if case[8] else None,
                     "patient_id": current_user_id,
-                    "patient_name": f"{case[9]} {case[10]}"  # first_name, last_name from users table
+                    "patient_name": f"{case[9]} {case[10]}",
+                    "patient_address": case[11] or '',
+                    "patient_sex": case[12] or '',
+                    "patient_age": age_str,
+                    "doctor_name": doctor_name,
+                    "doctor_license": case[16] or '',
+                    "doctor_ptr": case[17] or ''
                 })
         
         await cursor.close()
